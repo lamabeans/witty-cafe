@@ -1,30 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-
-async function getOrCreateUser(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    return null;
-  }
-
-  const existing = await ctx.db
-    .query("users")
-    .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", identity.subject))
-    .unique();
-
-  if (existing) {
-    return existing;
-  }
-
-  const userId = await ctx.db.insert("users", {
-    clerkUserId: identity.subject,
-    email: identity.email ?? undefined,
-    name: identity.name ?? undefined,
-    imageUrl: identity.pictureUrl ?? undefined,
-  });
-
-  return await ctx.db.get(userId);
-}
+import { getOrCreateUser } from "./lib/getOrCreateUser";
 
 export const cast = mutation({
   args: {

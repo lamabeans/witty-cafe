@@ -1,35 +1,19 @@
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getOrCreateUser } from "./lib/getOrCreateUser";
 import { slugify } from "./lib/slugify";
+import type { EnrichedPost } from "./types";
 
 const DEFAULT_LIMIT = 40;
 
-async function getOrCreateUser(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    return null;
-  }
+type DbContext = Pick<QueryCtx, "db"> | Pick<MutationCtx, "db">;
 
-  const existing = await ctx.db
-    .query("users")
-    .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", identity.subject))
-    .unique();
-
-  if (existing) {
-    return existing;
-  }
-
-  const userId = await ctx.db.insert("users", {
-    clerkUserId: identity.subject,
-    email: identity.email ?? undefined,
-    name: identity.name ?? undefined,
-    imageUrl: identity.pictureUrl ?? undefined,
-  });
-
-  return await ctx.db.get(userId);
-}
-
-async function resolveTags(ctx: any, tagNames: string[] | undefined) {
+async function resolveTags(
+  ctx: MutationCtx,
+  tagNames: string[] | undefined
+): Promise<Array<Id<"tags">>> {
   if (!tagNames || tagNames.length === 0) {
     return [];
   }
@@ -42,12 +26,12 @@ async function resolveTags(ctx: any, tagNames: string[] | undefined) {
     )
   );
 
-  const tagIds = [];
+  const tagIds: Array<Id<"tags">> = [];
   for (const name of uniqueNames) {
     const slug = slugify(name);
     const existing = await ctx.db
       .query("tags")
-      .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
 
     if (existing) {
@@ -62,17 +46,20 @@ async function resolveTags(ctx: any, tagNames: string[] | undefined) {
   return tagIds;
 }
 
-async function enrichPost(ctx: any, post: any) {
+async function enrichPost(
+  ctx: DbContext,
+  post: Doc<"posts">
+): Promise<EnrichedPost> {
   const subreddit = await ctx.db.get(post.subredditId);
   const author = post.authorId ? await ctx.db.get(post.authorId) : null;
   const tagLinks = await ctx.db
     .query("postTags")
-    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
+    .withIndex("by_post", (q) => q.eq("postId", post._id))
     .collect();
 
   const tags = (
-    await Promise.all(tagLinks.map((link: any) => ctx.db.get(link.tagId)))
-  ).filter(Boolean);
+    await Promise.all(tagLinks.map((link) => ctx.db.get(link.tagId)))
+  ).filter((tag): tag is Doc<"tags"> => tag !== null);
 
   return {
     ...post,
@@ -88,7 +75,7 @@ async function enrichPost(ctx: any, post: any) {
           imageUrl: author.imageUrl ?? null,
         }
       : null,
-    tags: tags.map((tag: any) => ({
+    tags: tags.map((tag) => ({
       name: tag.name,
       slug: tag.slug,
     })),
@@ -103,7 +90,7 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? DEFAULT_LIMIT;
-    let posts: any[] = [];
+    let posts: Array<Doc<"posts">> = [];
 
     if (args.subredditSlug) {
       const subreddit = await ctx.db
@@ -139,10 +126,10 @@ export const list = query({
 
       const linkedPosts = (
         await Promise.all(links.map((link) => ctx.db.get(link.postId)))
-      ).filter(Boolean);
+      ).filter((post): post is Doc<"posts"> => post !== null);
 
       posts = linkedPosts
-        .sort((a: any, b: any) => b.createdAt - a.createdAt)
+        .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit);
     } else {
       posts = await ctx.db
@@ -152,7 +139,7 @@ export const list = query({
         .take(limit);
     }
 
-    const enriched = [];
+    const enriched: EnrichedPost[] = [];
     for (const post of posts) {
       enriched.push(await enrichPost(ctx, post));
     }

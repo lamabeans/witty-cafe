@@ -5,8 +5,9 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
-import type { Id } from "convex/values";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import type { EnrichedComment, EnrichedPost } from "../../../convex/types";
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -20,8 +21,13 @@ export default function PostPage() {
   const { isSignedIn } = useAuth();
   const params = useParams<{ postId: string }>();
   const postId = params.postId as Id<"posts">;
-  const post = useQuery(api.posts.get, { postId });
-  const comments = useQuery(api.comments.listByPost, { postId });
+  const post = useQuery(api.posts.get, { postId }) as
+    | EnrichedPost
+    | null
+    | undefined;
+  const comments = useQuery(api.comments.listByPost, { postId }) as
+    | EnrichedComment[]
+    | undefined;
   const createComment = useMutation(api.comments.create);
   const castVote = useMutation(api.votes.cast);
 
@@ -92,7 +98,7 @@ export default function PostPage() {
               <p className="mt-4 text-base text-slate-600">{post.body}</p>
             ) : null}
             <div className="mt-5 flex flex-wrap gap-2">
-              {(post.tags ?? []).map((tag: any) => (
+              {(post.tags ?? []).map((tag) => (
                 <span
                   key={tag.slug}
                   className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
@@ -162,7 +168,7 @@ export default function PostPage() {
           )}
 
           <div className="mt-6 flex flex-col gap-4">
-            {(comments ?? []).map((comment: any) => (
+            {(comments ?? []).map((comment) => (
               <div
                 key={comment._id}
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-3"

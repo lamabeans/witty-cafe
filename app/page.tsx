@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import type { Doc, Id } from "../convex/_generated/dataModel";
+import type { EnrichedPost } from "../convex/types";
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -16,8 +18,10 @@ function formatDate(timestamp: number) {
 
 export default function Home() {
   const { isSignedIn } = useAuth();
-  const subreddits = useQuery(api.subreddits.list);
-  const tags = useQuery(api.tags.list);
+  const subreddits = useQuery(api.subreddits.list) as
+    | Array<Doc<"subreddits">>
+    | undefined;
+  const tags = useQuery(api.tags.list) as Array<Doc<"tags">> | undefined;
   const [activeSubreddit, setActiveSubreddit] = useState<string | null>(null);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -26,18 +30,18 @@ export default function Home() {
     subredditSlug: activeSubreddit ?? undefined,
     tagSlug: activeTag ?? undefined,
     limit: 60,
-  });
+  }) as EnrichedPost[] | undefined;
 
   const filteredPosts = useMemo(() => {
     if (!posts) return [];
     const query = search.trim().toLowerCase();
     if (!query) return posts;
-    return posts.filter((post: any) => {
+    return posts.filter((post) => {
       const haystack = [
         post.title,
         post.body,
         post.subreddit?.name,
-        post.tags?.map((tag: any) => tag.name).join(" "),
+        post.tags?.map((tag) => tag.name).join(" "),
       ]
         .filter(Boolean)
         .join(" ")
@@ -53,16 +57,13 @@ export default function Home() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tagInput, setTagInput] = useState("");
-  const [selectedSubredditId, setSelectedSubredditId] = useState<string | null>(null);
+  const [selectedSubredditIdOverride, setSelectedSubredditIdOverride] =
+    useState<Id<"subreddits"> | null>(null);
+  const selectedSubredditId =
+    selectedSubredditIdOverride ?? subreddits?.[0]?._id ?? null;
 
   const [communityName, setCommunityName] = useState("");
   const [communityDesc, setCommunityDesc] = useState("");
-
-  useEffect(() => {
-    if (!selectedSubredditId && subreddits && subreddits.length > 0) {
-      setSelectedSubredditId(subreddits[0]._id);
-    }
-  }, [selectedSubredditId, subreddits]);
 
   const handleCreatePost = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -76,7 +77,7 @@ export default function Home() {
     await createPost({
       title: title.trim(),
       body: body.trim() || undefined,
-      subredditId: selectedSubredditId as any,
+      subredditId: selectedSubredditId,
       tagNames,
     });
 
@@ -170,7 +171,7 @@ export default function Home() {
                 Communities
               </h2>
               <div className="mt-4 flex flex-col gap-2">
-                {(subreddits ?? []).map((community: any) => (
+                {(subreddits ?? []).map((community) => (
                   <button
                     key={community._id}
                     onClick={() => {
@@ -257,14 +258,18 @@ export default function Home() {
                     />
                     <select
                       value={selectedSubredditId ?? ""}
-                      onChange={(event) => setSelectedSubredditId(event.target.value)}
+                      onChange={(event) =>
+                        setSelectedSubredditIdOverride(
+                          event.target.value as Id<"subreddits">
+                        )
+                      }
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                       required
                     >
                       <option value="" disabled>
                         Choose community
                       </option>
-                      {(subreddits ?? []).map((community: any) => (
+                      {(subreddits ?? []).map((community) => (
                         <option key={community._id} value={community._id}>
                           r/{community.slug}
                         </option>
@@ -293,7 +298,7 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-4">
-              {filteredPosts.map((post: any, index: number) => (
+              {filteredPosts.map((post, index) => (
                 <article
                   key={post._id}
                   className="animate-fade-up rounded-3xl border border-slate-200/70 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -347,7 +352,7 @@ export default function Home() {
                         </p>
                       ) : null}
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                        {(post.tags ?? []).map((tag: any) => (
+                        {(post.tags ?? []).map((tag) => (
                           <button
                             key={tag.slug}
                             onClick={() => {
@@ -387,7 +392,7 @@ export default function Home() {
                 Tags
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
-                {(tags ?? []).map((tag: any) => (
+                {(tags ?? []).map((tag) => (
                   <button
                     key={tag._id}
                     onClick={() => {

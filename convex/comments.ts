@@ -1,30 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-async function getOrCreateUser(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    return null;
-  }
-
-  const existing = await ctx.db
-    .query("users")
-    .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", identity.subject))
-    .unique();
-
-  if (existing) {
-    return existing;
-  }
-
-  const userId = await ctx.db.insert("users", {
-    clerkUserId: identity.subject,
-    email: identity.email ?? undefined,
-    name: identity.name ?? undefined,
-    imageUrl: identity.pictureUrl ?? undefined,
-  });
-
-  return await ctx.db.get(userId);
-}
+import { getOrCreateUser } from "./lib/getOrCreateUser";
+import type { EnrichedComment } from "./types";
 
 export const listByPost = query({
   args: { postId: v.id("posts") },
@@ -35,7 +12,7 @@ export const listByPost = query({
       .order("asc")
       .collect();
 
-    const enriched = [];
+    const enriched: EnrichedComment[] = [];
     for (const comment of comments) {
       const author = comment.authorId
         ? await ctx.db.get(comment.authorId)
