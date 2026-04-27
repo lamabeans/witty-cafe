@@ -40,7 +40,11 @@ export const cast = mutation({
         score: post.score + args.value,
       });
 
-      return { status: "created" };
+      return {
+        status: "created",
+        score: post.score + args.value,
+        viewerVote: args.value,
+      };
     }
 
     if (existing.value === args.value) {
@@ -48,7 +52,11 @@ export const cast = mutation({
       await ctx.db.patch(args.postId, {
         score: post.score - args.value,
       });
-      return { status: "removed" };
+      return {
+        status: "removed",
+        score: post.score - args.value,
+        viewerVote: null,
+      };
     }
 
     await ctx.db.patch(existing._id, {
@@ -58,6 +66,10 @@ export const cast = mutation({
       score: post.score - existing.value + args.value,
     });
 
-    return { status: "updated" };
+    return {
+      status: "updated",
+      score: post.score - existing.value + args.value,
+      viewerVote: args.value,
+    };
   },
 });

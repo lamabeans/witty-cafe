@@ -10,7 +10,8 @@
     "import:old": "node scripts/importOldData.mjs",
     "import:bubble:dry-run": "node scripts/importBubbleCsv.mjs --live",
     "import:bubble:dev": "node scripts/importBubbleCsv.mjs --dev",
-    "import:bubble": "node scripts/importBubbleCsv.mjs --live --import"
+    "import:bubble": "node scripts/importBubbleCsv.mjs --live --import",
+    "migrate:rich-text": "node scripts/migrateRichText.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",

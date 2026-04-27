@@ -37,6 +37,9 @@ export default defineSchema({
   posts: defineTable({
     title: v.string(),
     body: v.optional(v.string()),
+    contentJson: v.optional(v.any()),
+    legacyBody: v.optional(v.string()),
+    plainTextExcerpt: v.optional(v.string()),
     subredditId: v.id("subreddits"),
     authorId: v.optional(v.id("users")),
     createdAt: v.number(),
@@ -93,6 +96,24 @@ export default defineSchema({
   mediaItems: defineTable({
     postId: v.id("posts"),
     legacyGalleryId: v.string(),
+    source: v.optional(v.union(v.literal("legacy"), v.literal("upload"))),
+    mediaType: v.optional(
+      v.union(
+        v.literal("image"),
+        v.literal("video"),
+        v.literal("audio"),
+        v.literal("unknown")
+      )
+    ),
+    storageId: v.optional(v.id("_storage")),
+    order: v.optional(v.number()),
+    filename: v.optional(v.string()),
+    size: v.optional(v.number()),
+    altText: v.optional(v.string()),
+    duration: v.optional(v.number()),
+    status: v.optional(
+      v.union(v.literal("ready"), v.literal("processing"), v.literal("hidden"))
+    ),
     postContentLegacyId: v.optional(v.string()),
     frameTypeLegacyId: v.optional(v.string()),
     frameType: v.optional(v.string()),
@@ -109,5 +130,6 @@ export default defineSchema({
   })
     .index("by_post", ["postId"])
     .index("by_legacyGalleryId", ["legacyGalleryId"])
+    .index("by_storageId", ["storageId"])
     .index("by_post_marker", ["postId", "marker"]),
 });

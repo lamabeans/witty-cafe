@@ -2,6 +2,11 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import {
+  bbcodeToRichText,
+  excerptFromText,
+  titleFromContent,
+} from "./lib/richText";
 import { slugify } from "./lib/slugify";
 
 const userInput = v.object({
@@ -67,6 +72,15 @@ const mediaItemInput = v.object({
   createdAt: v.optional(v.number()),
   modifiedAt: v.optional(v.number()),
 });
+
+function inferMediaType(imageType: string | undefined, imageUrl: string | undefined) {
+  const mime = imageType?.toLowerCase() ?? "";
+  if (mime.startsWith("video/")) return "video" as const;
+  if (mime.startsWith("audio/")) return "audio" as const;
+  if (mime.startsWith("image/")) return "image" as const;
+  if (imageUrl) return "image" as const;
+  return "unknown" as const;
+}
 
 type Stats = {
   usersCreated: number;
@@ -203,9 +217,13 @@ export const importAll = mutation({
         ? null
         : await findUserByEmail(ctx, user.email);
       const existing = existingByLegacy ?? existingByClerk ?? existingByEmail;
+      const clerkUserId =
+        existing?.clerkUserId && !existing.clerkUserId.startsWith("legacy:")
+          ? existing.clerkUserId
+          : user.clerkUserId;
 
       const patch = cleanPatch({
-        clerkUserId: user.clerkUserId,
+        clerkUserId,
         email: user.email,
         name: user.name,
         username: user.username,
@@ -220,7 +238,7 @@ export const importAll = mutation({
         stats.usersUpdated += 1;
       } else {
         const userId = await ctx.db.insert("users", {
-          clerkUserId: user.clerkUserId,
+          clerkUserId,
           email: user.email,
           name: user.name,
           username: user.username,
@@ -358,9 +376,13 @@ export const importAll = mutation({
         .query("posts")
         .withIndex("by_legacyId", (q) => q.eq("legacyId", post.legacyId))
         .unique();
+      const title = titleFromContent(post.title, post.body);
       const patch = cleanPatch({
-        title: post.title,
+        title,
         body: post.body,
+        legacyBody: post.body,
+        contentJson: bbcodeToRichText(post.body),
+        plainTextExcerpt: excerptFromText(post.body),
         subredditId,
         authorId: undefined,
         createdAt: post.createdAt ?? Date.now(),
@@ -375,9 +397,12 @@ export const importAll = mutation({
 
       const postId = existing
         ? existing._id
-        : await ctx.db.insert("posts", {
-            title: post.title,
+          : await ctx.db.insert("posts", {
+            title,
             body: post.body,
+            legacyBody: post.body,
+            contentJson: bbcodeToRichText(post.body),
+            plainTextExcerpt: excerptFromText(post.body),
             subredditId,
             authorId: undefined,
             createdAt: post.createdAt ?? Date.now(),
@@ -465,6 +490,12 @@ export const importAll = mutation({
       const patch = cleanPatch({
         postId,
         legacyGalleryId: mediaItem.legacyGalleryId,
+        source: "legacy" as const,
+        mediaType: inferMediaType(mediaItem.imageType, mediaItem.imageUrl),
+        order: mediaItem.marker,
+        filename: mediaItem.imageName,
+        altText: mediaItem.imageName,
+        status: "ready" as const,
         postContentLegacyId: mediaItem.postContentLegacyId,
         frameTypeLegacyId: mediaItem.frameTypeLegacyId,
         frameType: mediaItem.frameType,
@@ -487,6 +518,12 @@ export const importAll = mutation({
         await ctx.db.insert("mediaItems", {
           postId,
           legacyGalleryId: mediaItem.legacyGalleryId,
+          source: "legacy" as const,
+          mediaType: inferMediaType(mediaItem.imageType, mediaItem.imageUrl),
+          order: mediaItem.marker,
+          filename: mediaItem.imageName,
+          altText: mediaItem.imageName,
+          status: "ready" as const,
           postContentLegacyId: mediaItem.postContentLegacyId,
           frameTypeLegacyId: mediaItem.frameTypeLegacyId,
           frameType: mediaItem.frameType,
