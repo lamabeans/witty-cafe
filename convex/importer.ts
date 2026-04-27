@@ -1,200 +1,510 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { slugify } from "./lib/slugify";
+
+const userInput = v.object({
+  legacyId: v.string(),
+  clerkUserId: v.string(),
+  email: v.optional(v.string()),
+  name: v.optional(v.string()),
+  username: v.optional(v.string()),
+  createdAt: v.optional(v.number()),
+  modifiedAt: v.optional(v.number()),
+  joinedSubredditLegacyIds: v.optional(v.array(v.string())),
+});
+
+const subredditInput = v.object({
+  legacyId: v.string(),
+  name: v.string(),
+  slug: v.optional(v.string()),
+  description: v.optional(v.string()),
+  introduction: v.optional(v.string()),
+  conclusion: v.optional(v.string()),
+  bannerImage: v.optional(v.string()),
+  nsfw: v.optional(v.boolean()),
+  moderatorEmails: v.optional(v.array(v.string())),
+  createdAt: v.optional(v.number()),
+  modifiedAt: v.optional(v.number()),
+});
+
+const tagInput = v.object({
+  legacyId: v.string(),
+  name: v.string(),
+  slug: v.optional(v.string()),
+});
+
+const postInput = v.object({
+  legacyId: v.string(),
+  postContentLegacyId: v.optional(v.string()),
+  title: v.string(),
+  body: v.optional(v.string()),
+  subredditLegacyId: v.string(),
+  createdAt: v.optional(v.number()),
+  modifiedAt: v.optional(v.number()),
+  score: v.optional(v.number()),
+  commentCount: v.optional(v.number()),
+  nsfw: v.optional(v.boolean()),
+  upvoteEmails: v.optional(v.array(v.string())),
+  tagLegacyIds: v.optional(v.array(v.string())),
+});
+
+const mediaItemInput = v.object({
+  legacyGalleryId: v.string(),
+  postLegacyId: v.string(),
+  postContentLegacyId: v.optional(v.string()),
+  frameTypeLegacyId: v.optional(v.string()),
+  frameType: v.optional(v.string()),
+  marker: v.optional(v.number()),
+  score: v.optional(v.number()),
+  shortId: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  imageFile: v.optional(v.string()),
+  imageName: v.optional(v.string()),
+  imageType: v.optional(v.string()),
+  nsfw: v.optional(v.boolean()),
+  createdAt: v.optional(v.number()),
+  modifiedAt: v.optional(v.number()),
+});
+
+type Stats = {
+  usersCreated: number;
+  usersUpdated: number;
+  subredditsCreated: number;
+  subredditsUpdated: number;
+  tagsCreated: number;
+  tagsUpdated: number;
+  postsCreated: number;
+  postsUpdated: number;
+  postTagsCreated: number;
+  postTagsSkipped: number;
+  votesCreated: number;
+  votesUpdated: number;
+  votesSkipped: number;
+  membershipsCreated: number;
+  membershipsSkipped: number;
+  mediaCreated: number;
+  mediaUpdated: number;
+  unresolved: string[];
+};
+
+function cleanPatch<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  ) as Partial<T>;
+}
+
+async function findUserByEmail(
+  ctx: Pick<MutationCtx, "db">,
+  email: string | undefined
+) {
+  if (!email) return null;
+  return await ctx.db
+    .query("users")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .unique();
+}
 
 export const importAll = mutation({
   args: {
-    subreddits: v.array(
-      v.object({
-        legacyId: v.string(),
-        name: v.string(),
-        slug: v.optional(v.string()),
-        description: v.optional(v.string()),
-        createdAt: v.optional(v.number()),
-      })
-    ),
-    tags: v.array(
-      v.object({
-        legacyId: v.string(),
-        name: v.string(),
-        slug: v.optional(v.string()),
-      })
-    ),
-    posts: v.array(
-      v.object({
-        legacyId: v.string(),
-        title: v.string(),
-        body: v.optional(v.string()),
-        subredditLegacyId: v.string(),
-        createdAt: v.optional(v.number()),
-        score: v.optional(v.number()),
-        commentCount: v.optional(v.number()),
-        tagLegacyIds: v.optional(v.array(v.string())),
-      })
-    ),
-    comments: v.optional(
-      v.array(
-        v.object({
-          legacyId: v.string(),
-          postLegacyId: v.string(),
-          body: v.string(),
-          createdAt: v.optional(v.number()),
-        })
-      )
-    ),
+    users: v.optional(v.array(userInput)),
+    subreddits: v.optional(v.array(subredditInput)),
+    tags: v.optional(v.array(tagInput)),
+    posts: v.optional(v.array(postInput)),
+    mediaItems: v.optional(v.array(mediaItemInput)),
   },
-  handler: async (ctx, args) => {
-    const subredditIdByLegacy = new Map<string, string>();
-    const tagIdByLegacy = new Map<string, string>();
-    const postIdByLegacy = new Map<string, string>();
+  handler: async (ctx, args): Promise<Stats> => {
+    const stats: Stats = {
+      usersCreated: 0,
+      usersUpdated: 0,
+      subredditsCreated: 0,
+      subredditsUpdated: 0,
+      tagsCreated: 0,
+      tagsUpdated: 0,
+      postsCreated: 0,
+      postsUpdated: 0,
+      postTagsCreated: 0,
+      postTagsSkipped: 0,
+      votesCreated: 0,
+      votesUpdated: 0,
+      votesSkipped: 0,
+      membershipsCreated: 0,
+      membershipsSkipped: 0,
+      mediaCreated: 0,
+      mediaUpdated: 0,
+      unresolved: [],
+    };
 
-    let subredditsCreated = 0;
-    let tagsCreated = 0;
-    let postsCreated = 0;
-    let commentsCreated = 0;
+    const userIdByEmail = new Map<string, Id<"users">>();
+    const subredditIdByLegacy = new Map<string, Id<"subreddits">>();
+    const tagIdByLegacy = new Map<string, Id<"tags">>();
+    const postIdByLegacy = new Map<string, Id<"posts">>();
 
-    for (const subreddit of args.subreddits) {
+    async function resolveSubreddit(legacyId: string) {
+      const cached = subredditIdByLegacy.get(legacyId);
+      if (cached) return cached;
       const existing = await ctx.db
+        .query("subreddits")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", legacyId))
+        .unique();
+      if (!existing) return null;
+      subredditIdByLegacy.set(legacyId, existing._id);
+      return existing._id;
+    }
+
+    async function resolveTag(legacyId: string) {
+      const cached = tagIdByLegacy.get(legacyId);
+      if (cached) return cached;
+      const existing = await ctx.db
+        .query("tags")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", legacyId))
+        .unique();
+      if (!existing) return null;
+      tagIdByLegacy.set(legacyId, existing._id);
+      return existing._id;
+    }
+
+    async function resolvePost(legacyId: string) {
+      const cached = postIdByLegacy.get(legacyId);
+      if (cached) return cached;
+      const existing = await ctx.db
+        .query("posts")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", legacyId))
+        .unique();
+      if (!existing) return null;
+      postIdByLegacy.set(legacyId, existing._id);
+      return existing._id;
+    }
+
+    async function resolveUserByEmail(email: string) {
+      const cached = userIdByEmail.get(email.toLowerCase());
+      if (cached) return cached;
+      const existing = await findUserByEmail(ctx, email.toLowerCase());
+      if (!existing) return null;
+      userIdByEmail.set(email.toLowerCase(), existing._id);
+      return existing._id;
+    }
+
+    for (const user of args.users ?? []) {
+      const existingByLegacy = await ctx.db
+        .query("users")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", user.legacyId))
+        .unique();
+      const existingByClerk = existingByLegacy
+        ? null
+        : await ctx.db
+            .query("users")
+            .withIndex("by_clerkUserId", (q) =>
+              q.eq("clerkUserId", user.clerkUserId)
+            )
+            .unique();
+      const existingByEmail = existingByLegacy || existingByClerk
+        ? null
+        : await findUserByEmail(ctx, user.email);
+      const existing = existingByLegacy ?? existingByClerk ?? existingByEmail;
+
+      const patch = cleanPatch({
+        clerkUserId: user.clerkUserId,
+        email: user.email,
+        name: user.name,
+        username: user.username,
+        legacyId: user.legacyId,
+        createdAt: user.createdAt,
+        modifiedAt: user.modifiedAt,
+      });
+
+      if (existing) {
+        await ctx.db.patch(existing._id, patch);
+        if (user.email) userIdByEmail.set(user.email.toLowerCase(), existing._id);
+        stats.usersUpdated += 1;
+      } else {
+        const userId = await ctx.db.insert("users", {
+          clerkUserId: user.clerkUserId,
+          email: user.email,
+          name: user.name,
+          username: user.username,
+          legacyId: user.legacyId,
+          createdAt: user.createdAt,
+          modifiedAt: user.modifiedAt,
+        });
+        if (user.email) userIdByEmail.set(user.email.toLowerCase(), userId);
+        stats.usersCreated += 1;
+      }
+    }
+
+    for (const subreddit of args.subreddits ?? []) {
+      const slug = subreddit.slug ?? slugify(subreddit.name);
+      const existingByLegacy = await ctx.db
         .query("subreddits")
         .withIndex("by_legacyId", (q) => q.eq("legacyId", subreddit.legacyId))
         .unique();
-
-      if (existing) {
-        subredditIdByLegacy.set(subreddit.legacyId, existing._id);
-        continue;
-      }
-
-      const slug = subreddit.slug ?? slugify(subreddit.name);
-      const maybeSlug = await ctx.db
-        .query("subreddits")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique();
-
-      if (maybeSlug) {
-        subredditIdByLegacy.set(subreddit.legacyId, maybeSlug._id);
-        await ctx.db.patch(maybeSlug._id, {
-          legacyId: maybeSlug.legacyId ?? subreddit.legacyId,
-        });
-        continue;
-      }
-
-      const subredditId = await ctx.db.insert("subreddits", {
+      const existingBySlug = existingByLegacy
+        ? null
+        : await ctx.db
+            .query("subreddits")
+            .withIndex("by_slug", (q) => q.eq("slug", slug))
+            .unique();
+      const existing = existingByLegacy ?? existingBySlug;
+      const patch = cleanPatch({
         name: subreddit.name,
         slug,
         description: subreddit.description,
+        introduction: subreddit.introduction,
+        conclusion: subreddit.conclusion,
+        bannerImage: subreddit.bannerImage,
+        nsfw: subreddit.nsfw,
+        moderatorEmails: subreddit.moderatorEmails,
         createdAt: subreddit.createdAt ?? Date.now(),
+        modifiedAt: subreddit.modifiedAt,
         legacyId: subreddit.legacyId,
       });
-      subredditIdByLegacy.set(subreddit.legacyId, subredditId);
-      subredditsCreated += 1;
+
+      if (existing) {
+        await ctx.db.patch(existing._id, patch);
+        subredditIdByLegacy.set(subreddit.legacyId, existing._id);
+        stats.subredditsUpdated += 1;
+      } else {
+        const subredditId = await ctx.db.insert("subreddits", {
+          name: subreddit.name,
+          slug,
+          description: subreddit.description,
+          introduction: subreddit.introduction,
+          conclusion: subreddit.conclusion,
+          bannerImage: subreddit.bannerImage,
+          nsfw: subreddit.nsfw,
+          moderatorEmails: subreddit.moderatorEmails,
+          createdAt: subreddit.createdAt ?? Date.now(),
+          modifiedAt: subreddit.modifiedAt,
+          legacyId: subreddit.legacyId,
+        });
+        subredditIdByLegacy.set(subreddit.legacyId, subredditId);
+        stats.subredditsCreated += 1;
+      }
     }
 
-    for (const tag of args.tags) {
-      const existing = await ctx.db
+    for (const tag of args.tags ?? []) {
+      const slug = tag.slug ?? slugify(tag.name);
+      const existingByLegacy = await ctx.db
         .query("tags")
         .withIndex("by_legacyId", (q) => q.eq("legacyId", tag.legacyId))
         .unique();
-
-      if (existing) {
-        tagIdByLegacy.set(tag.legacyId, existing._id);
-        continue;
-      }
-
-      const slug = tag.slug ?? slugify(tag.name);
-      const maybeSlug = await ctx.db
-        .query("tags")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique();
-
-      if (maybeSlug) {
-        tagIdByLegacy.set(tag.legacyId, maybeSlug._id);
-        await ctx.db.patch(maybeSlug._id, {
-          legacyId: maybeSlug.legacyId ?? tag.legacyId,
-        });
-        continue;
-      }
-
-      const tagId = await ctx.db.insert("tags", {
+      const existingBySlug = existingByLegacy
+        ? null
+        : await ctx.db
+            .query("tags")
+            .withIndex("by_slug", (q) => q.eq("slug", slug))
+            .unique();
+      const existing = existingByLegacy ?? existingBySlug;
+      const patch = cleanPatch({
         name: tag.name,
         slug,
         legacyId: tag.legacyId,
       });
-      tagIdByLegacy.set(tag.legacyId, tagId);
-      tagsCreated += 1;
+
+      if (existing) {
+        await ctx.db.patch(existing._id, patch);
+        tagIdByLegacy.set(tag.legacyId, existing._id);
+        stats.tagsUpdated += 1;
+      } else {
+        const tagId = await ctx.db.insert("tags", {
+          name: tag.name,
+          slug,
+          legacyId: tag.legacyId,
+        });
+        tagIdByLegacy.set(tag.legacyId, tagId);
+        stats.tagsCreated += 1;
+      }
     }
 
-    for (const post of args.posts) {
+    for (const user of args.users ?? []) {
+      if (!user.email) continue;
+      const userId = userIdByEmail.get(user.email.toLowerCase());
+      if (!userId) continue;
+
+      for (const subredditLegacyId of user.joinedSubredditLegacyIds ?? []) {
+        const subredditId = await resolveSubreddit(subredditLegacyId);
+        if (!subredditId) {
+          stats.unresolved.push(
+            `membership:${user.email}->${subredditLegacyId}`
+          );
+          continue;
+        }
+
+        const existing = await ctx.db
+          .query("subredditMembers")
+          .withIndex("by_user_subreddit", (q) =>
+            q.eq("userId", userId).eq("subredditId", subredditId)
+          )
+          .unique();
+        if (existing) {
+          stats.membershipsSkipped += 1;
+          continue;
+        }
+
+        await ctx.db.insert("subredditMembers", { userId, subredditId });
+        stats.membershipsCreated += 1;
+      }
+    }
+
+    for (const post of args.posts ?? []) {
+      const subredditId = await resolveSubreddit(post.subredditLegacyId);
+      if (!subredditId) {
+        stats.unresolved.push(`post:${post.legacyId}->${post.subredditLegacyId}`);
+        continue;
+      }
+
       const existing = await ctx.db
         .query("posts")
         .withIndex("by_legacyId", (q) => q.eq("legacyId", post.legacyId))
         .unique();
-
-      if (existing) {
-        postIdByLegacy.set(post.legacyId, existing._id);
-        continue;
-      }
-
-      const subredditId = subredditIdByLegacy.get(post.subredditLegacyId);
-      if (!subredditId) {
-        continue;
-      }
-
-      const postId = await ctx.db.insert("posts", {
+      const patch = cleanPatch({
         title: post.title,
         body: post.body,
         subredditId,
         authorId: undefined,
         createdAt: post.createdAt ?? Date.now(),
+        modifiedAt: post.modifiedAt,
         score: post.score ?? 0,
         commentCount: post.commentCount ?? 0,
+        nsfw: post.nsfw,
+        upvoteEmails: post.upvoteEmails,
         legacyId: post.legacyId,
+        postContentLegacyId: post.postContentLegacyId,
       });
+
+      const postId = existing
+        ? existing._id
+        : await ctx.db.insert("posts", {
+            title: post.title,
+            body: post.body,
+            subredditId,
+            authorId: undefined,
+            createdAt: post.createdAt ?? Date.now(),
+            modifiedAt: post.modifiedAt,
+            score: post.score ?? 0,
+            commentCount: post.commentCount ?? 0,
+            nsfw: post.nsfw,
+            upvoteEmails: post.upvoteEmails,
+            legacyId: post.legacyId,
+            postContentLegacyId: post.postContentLegacyId,
+          });
+      if (existing) {
+        await ctx.db.patch(existing._id, patch);
+        stats.postsUpdated += 1;
+      } else {
+        stats.postsCreated += 1;
+      }
       postIdByLegacy.set(post.legacyId, postId);
-      postsCreated += 1;
 
-      const tagIds = (post.tagLegacyIds ?? [])
-        .map((tagLegacyId) => tagIdByLegacy.get(tagLegacyId))
-        .filter(Boolean) as string[];
+      for (const tagLegacyId of post.tagLegacyIds ?? []) {
+        const tagId = await resolveTag(tagLegacyId);
+        if (!tagId) {
+          stats.unresolved.push(`postTag:${post.legacyId}->${tagLegacyId}`);
+          continue;
+        }
 
-      for (const tagId of tagIds) {
-        await ctx.db.insert("postTags", {
-          postId,
-          tagId,
-        });
+        const existingTagLink = await ctx.db
+          .query("postTags")
+          .withIndex("by_post_tag", (q) =>
+            q.eq("postId", postId).eq("tagId", tagId)
+          )
+          .unique();
+        if (existingTagLink) {
+          stats.postTagsSkipped += 1;
+          continue;
+        }
+
+        await ctx.db.insert("postTags", { postId, tagId });
+        stats.postTagsCreated += 1;
+      }
+
+      for (const email of post.upvoteEmails ?? []) {
+        const userId = await resolveUserByEmail(email);
+        if (!userId) {
+          stats.unresolved.push(`vote:${post.legacyId}->${email}`);
+          continue;
+        }
+
+        const existingVote = await ctx.db
+          .query("votes")
+          .withIndex("by_post_user", (q) =>
+            q.eq("postId", postId).eq("userId", userId)
+          )
+          .unique();
+        if (existingVote) {
+          if (existingVote.value !== 1) {
+            await ctx.db.patch(existingVote._id, { value: 1 });
+            stats.votesUpdated += 1;
+          } else {
+            stats.votesSkipped += 1;
+          }
+          continue;
+        }
+
+        await ctx.db.insert("votes", { postId, userId, value: 1 });
+        stats.votesCreated += 1;
       }
     }
 
-    for (const comment of args.comments ?? []) {
+    for (const mediaItem of args.mediaItems ?? []) {
+      const postId = await resolvePost(mediaItem.postLegacyId);
+      if (!postId) {
+        stats.unresolved.push(
+          `media:${mediaItem.legacyGalleryId}->${mediaItem.postLegacyId}`
+        );
+        continue;
+      }
+
       const existing = await ctx.db
-        .query("comments")
-        .withIndex("by_legacyId", (q) => q.eq("legacyId", comment.legacyId))
+        .query("mediaItems")
+        .withIndex("by_legacyGalleryId", (q) =>
+          q.eq("legacyGalleryId", mediaItem.legacyGalleryId)
+        )
         .unique();
+      const patch = cleanPatch({
+        postId,
+        legacyGalleryId: mediaItem.legacyGalleryId,
+        postContentLegacyId: mediaItem.postContentLegacyId,
+        frameTypeLegacyId: mediaItem.frameTypeLegacyId,
+        frameType: mediaItem.frameType,
+        marker: mediaItem.marker,
+        score: mediaItem.score,
+        shortId: mediaItem.shortId,
+        imageUrl: mediaItem.imageUrl,
+        imageFile: mediaItem.imageFile,
+        imageName: mediaItem.imageName,
+        imageType: mediaItem.imageType,
+        nsfw: mediaItem.nsfw,
+        createdAt: mediaItem.createdAt ?? Date.now(),
+        modifiedAt: mediaItem.modifiedAt,
+      });
 
       if (existing) {
-        continue;
+        await ctx.db.patch(existing._id, patch);
+        stats.mediaUpdated += 1;
+      } else {
+        await ctx.db.insert("mediaItems", {
+          postId,
+          legacyGalleryId: mediaItem.legacyGalleryId,
+          postContentLegacyId: mediaItem.postContentLegacyId,
+          frameTypeLegacyId: mediaItem.frameTypeLegacyId,
+          frameType: mediaItem.frameType,
+          marker: mediaItem.marker,
+          score: mediaItem.score,
+          shortId: mediaItem.shortId,
+          imageUrl: mediaItem.imageUrl,
+          imageFile: mediaItem.imageFile,
+          imageName: mediaItem.imageName,
+          imageType: mediaItem.imageType,
+          nsfw: mediaItem.nsfw,
+          createdAt: mediaItem.createdAt ?? Date.now(),
+          modifiedAt: mediaItem.modifiedAt,
+        });
+        stats.mediaCreated += 1;
       }
-
-      const postId = postIdByLegacy.get(comment.postLegacyId);
-      if (!postId) {
-        continue;
-      }
-
-      await ctx.db.insert("comments", {
-        postId,
-        parentId: undefined,
-        authorId: undefined,
-        body: comment.body,
-        createdAt: comment.createdAt ?? Date.now(),
-        legacyId: comment.legacyId,
-      });
-      commentsCreated += 1;
     }
 
-    return {
-      subredditsCreated,
-      tagsCreated,
-      postsCreated,
-      commentsCreated,
-    };
+    return stats;
   },
 });

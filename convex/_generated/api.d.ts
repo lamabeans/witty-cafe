@@ -8,9 +8,18 @@
  * @module
  */
 
+import type * as comments from "../comments.js";
+import type * as importer from "../importer.js";
+import type * as lib_getOrCreateUser from "../lib/getOrCreateUser.js";
+import type * as lib_slugify from "../lib/slugify.js";
+import type * as posts from "../posts.js";
 import type * as rag from "../rag.js";
+import type * as subreddits from "../subreddits.js";
+import type * as tags from "../tags.js";
 import type * as tasks from "../tasks.js";
+import type * as types from "../types.js";
 import type * as users from "../users.js";
+import type * as votes from "../votes.js";
 
 import type {
   ApiFromModules,
@@ -19,9 +28,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  comments: typeof comments;
+  importer: typeof importer;
+  "lib/getOrCreateUser": typeof lib_getOrCreateUser;
+  "lib/slugify": typeof lib_slugify;
+  posts: typeof posts;
   rag: typeof rag;
+  subreddits: typeof subreddits;
+  tags: typeof tags;
   tasks: typeof tasks;
+  types: typeof types;
   users: typeof users;
+  votes: typeof votes;
 }>;
 
 /**

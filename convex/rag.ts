@@ -18,8 +18,7 @@ export const add = action({
   },
   handler: async (ctx, args) => {
     await rag.add(ctx, {
-      type: "text",
-      documentId: args.id,
+      key: args.id,
       namespace: DEFAULT_NAMESPACE,
       text: args.text,
     });
@@ -62,8 +61,7 @@ export const seed = action({
 
     for (const doc of docs) {
       await rag.add(ctx, {
-        type: "text",
-        documentId: doc.id,
+        key: doc.id,
         namespace: DEFAULT_NAMESPACE,
         text: doc.text,
       });
