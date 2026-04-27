@@ -11,7 +11,9 @@
     "import:bubble:dry-run": "node scripts/importBubbleCsv.mjs --live",
     "import:bubble:dev": "node scripts/importBubbleCsv.mjs --dev",
     "import:bubble": "node scripts/importBubbleCsv.mjs --live --import",
-    "migrate:rich-text": "node scripts/migrateRichText.mjs"
+    "migrate:rich-text": "node scripts/migrateRichText.mjs",
+    "import:post-images:dry-run": "node scripts/importPostImages.mjs --dry-run",
+    "import:post-images": "node scripts/importPostImages.mjs --import"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",

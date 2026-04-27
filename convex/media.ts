@@ -2,6 +2,12 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getOrCreateUser } from "./lib/getOrCreateUser";
 
+const importConfidenceValidator = v.union(
+  v.literal("high"),
+  v.literal("medium"),
+  v.literal("low")
+);
+
 const mediaTypeValidator = v.union(
   v.literal("image"),
   v.literal("video"),
@@ -17,6 +23,13 @@ function normalizeAssetUrl(value: string | undefined) {
   return trimmed;
 }
 
+function requireImportToken(token: string) {
+  const expected = process.env.IMAGE_IMPORT_TOKEN;
+  if (!expected || token !== expected) {
+    throw new Error("Invalid image import token.");
+  }
+}
+
 export const generateUploadUrl = mutation({
   handler: async (ctx) => {
     const user = await getOrCreateUser(ctx);
@@ -25,6 +38,125 @@ export const generateUploadUrl = mutation({
     }
 
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const listPostsForImageImport = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    requireImportToken(args.token);
+
+    const posts = await ctx.db.query("posts").collect();
+    const results = [];
+    for (const post of posts) {
+      const subreddit = await ctx.db.get(post.subredditId);
+      results.push({
+        _id: post._id,
+        title: post.title,
+        body: post.body,
+        legacyBody: post.legacyBody,
+        plainTextExcerpt: post.plainTextExcerpt,
+        createdAt: post.createdAt,
+        subreddit: subreddit
+          ? {
+              name: subreddit.name,
+              slug: subreddit.slug,
+            }
+          : null,
+      });
+    }
+
+    return results;
+  },
+});
+
+export const findImportedByLegacyId = query({
+  args: {
+    token: v.string(),
+    legacyGalleryId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireImportToken(args.token);
+
+    const existing = await ctx.db
+      .query("mediaItems")
+      .withIndex("by_legacyGalleryId", (q) =>
+        q.eq("legacyGalleryId", args.legacyGalleryId)
+      )
+      .unique();
+
+    if (!existing) return null;
+    return {
+      _id: existing._id,
+      postId: existing.postId,
+      storageId: existing.storageId,
+      legacyGalleryId: existing.legacyGalleryId,
+    };
+  },
+});
+
+export const generateImportUploadUrl = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    requireImportToken(args.token);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const attachImportedImage = mutation({
+  args: {
+    token: v.string(),
+    postId: v.id("posts"),
+    storageId: v.id("_storage"),
+    legacyGalleryId: v.string(),
+    filename: v.string(),
+    size: v.optional(v.number()),
+    altText: v.optional(v.string()),
+    order: v.optional(v.number()),
+    importSourceZip: v.string(),
+    importZipPath: v.string(),
+    importMatchText: v.string(),
+    importMatchConfidence: importConfidenceValidator,
+    importMatchScore: v.number(),
+  },
+  handler: async (ctx, args) => {
+    requireImportToken(args.token);
+
+    const post = await ctx.db.get(args.postId);
+    if (!post) {
+      throw new Error("Post not found.");
+    }
+
+    const existing = await ctx.db
+      .query("mediaItems")
+      .withIndex("by_legacyGalleryId", (q) =>
+        q.eq("legacyGalleryId", args.legacyGalleryId)
+      )
+      .unique();
+    if (existing) {
+      return { status: "skipped" as const, mediaItemId: existing._id };
+    }
+
+    const mediaItemId = await ctx.db.insert("mediaItems", {
+      postId: args.postId,
+      legacyGalleryId: args.legacyGalleryId,
+      source: "zip-import",
+      mediaType: "image",
+      storageId: args.storageId,
+      order: args.order ?? 0,
+      filename: args.filename,
+      size: args.size,
+      altText: args.altText,
+      status: "ready",
+      importSourceZip: args.importSourceZip,
+      importZipPath: args.importZipPath,
+      importMatchText: args.importMatchText,
+      importMatchConfidence: args.importMatchConfidence,
+      importMatchScore: args.importMatchScore,
+      createdAt: Date.now(),
+    });
+
+    return { status: "created" as const, mediaItemId };
   },
 });
 

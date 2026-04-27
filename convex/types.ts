@@ -32,7 +32,7 @@ export type RichTextDocument = {
 export type MediaSummary = {
   _id: Id<"mediaItems">;
   url: string | null;
-  source: "legacy" | "upload";
+  source: "legacy" | "upload" | "zip-import";
   mediaType: "image" | "video" | "audio" | "unknown";
   filename: string | null;
   altText: string | null;

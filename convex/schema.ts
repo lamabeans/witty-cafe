@@ -96,7 +96,13 @@ export default defineSchema({
   mediaItems: defineTable({
     postId: v.id("posts"),
     legacyGalleryId: v.string(),
-    source: v.optional(v.union(v.literal("legacy"), v.literal("upload"))),
+    source: v.optional(
+      v.union(
+        v.literal("legacy"),
+        v.literal("upload"),
+        v.literal("zip-import")
+      )
+    ),
     mediaType: v.optional(
       v.union(
         v.literal("image"),
@@ -114,6 +120,13 @@ export default defineSchema({
     status: v.optional(
       v.union(v.literal("ready"), v.literal("processing"), v.literal("hidden"))
     ),
+    importSourceZip: v.optional(v.string()),
+    importZipPath: v.optional(v.string()),
+    importMatchText: v.optional(v.string()),
+    importMatchConfidence: v.optional(
+      v.union(v.literal("high"), v.literal("medium"), v.literal("low"))
+    ),
+    importMatchScore: v.optional(v.number()),
     postContentLegacyId: v.optional(v.string()),
     frameTypeLegacyId: v.optional(v.string()),
     frameType: v.optional(v.string()),

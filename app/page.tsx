@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -124,6 +124,9 @@ export default function Home() {
   const [body, setBody] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<
+    { file: File; kind: MediaKind; url: string | null }[]
+  >([]);
   const [isPublishing, setIsPublishing] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
 
@@ -134,6 +137,21 @@ export default function Home() {
 
   const [voteError, setVoteError] = useState<string | null>(null);
   const [votingPostId, setVotingPostId] = useState<Id<"posts"> | null>(null);
+
+  useEffect(() => {
+    const previews = files.map((file) => ({
+      file,
+      kind: mediaKindFor(file),
+      url: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    }));
+    setFilePreviews(previews);
+
+    return () => {
+      for (const preview of previews) {
+        if (preview.url) URL.revokeObjectURL(preview.url);
+      }
+    };
+  }, [files]);
 
   const filteredPosts = useMemo(() => {
     if (!posts) return [];
@@ -495,14 +513,45 @@ export default function Home() {
                   </label>
                 </div>
                 {files.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {files.map((file) => (
-                      <span
-                        key={`${file.name}-${file.size}`}
-                        className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {filePreviews.map((preview) => (
+                      <div
+                        key={`${preview.file.name}-${preview.file.size}`}
+                        className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
                       >
-                        {file.name}
-                      </span>
+                        {preview.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={preview.url}
+                            alt={preview.file.name}
+                            className="h-32 w-full object-cover"
+                          />
+                        ) : (
+                          <div className="grid h-32 place-items-center px-3 text-sm font-semibold text-slate-500">
+                            {preview.kind === "video"
+                              ? "Video"
+                              : preview.kind === "audio"
+                                ? "Audio"
+                                : "Media"}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2">
+                          <span className="truncate text-xs font-medium text-slate-700">
+                            {preview.file.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFiles((current) =>
+                                current.filter((file) => file !== preview.file)
+                              )
+                            }
+                            className="rounded-md px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : null}
