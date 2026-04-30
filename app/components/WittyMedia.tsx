@@ -1,6 +1,7 @@
 "use client";
 
 import type { MediaSummary, ReactionCounts, ReactionKind } from "../../convex/types";
+import { cleanMediaAltText } from "../lib/site";
 
 export const REACTIONS: Array<{ kind: ReactionKind; label: string }> = [
   { kind: "like", label: "Like" },
@@ -20,10 +21,10 @@ export function reactionTotal(counts: ReactionCounts) {
 }
 
 function mediaLabel(item: MediaSummary) {
-  if (item.aiGenerated) {
-    return item.altText ?? item.filename ?? "AI-generated media";
-  }
-  return item.altText ?? item.filename ?? "Post media";
+  return cleanMediaAltText(
+    item.altText ?? item.filename,
+    item.aiGenerated ? "AI-generated media" : "Post media"
+  );
 }
 
 function mediaTypeLabel(item: MediaSummary) {

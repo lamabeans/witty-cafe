@@ -22,3 +22,16 @@ export function stripBbCode(value: string | null | undefined) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+export function cleanMediaAltText(
+  value: string | null | undefined,
+  fallback: string
+) {
+  const cleaned = stripBbCode(value)
+    .replace(/\.(jpe?g|png|gif|webp|avif|mp4|mov|webm|mp3|wav|ogg)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return truncateText(cleaned || fallback, 180);
+}

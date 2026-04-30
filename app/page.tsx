@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
@@ -438,6 +439,7 @@ function ComposePanel({
 }
 
 export default function Home() {
+  const router = useRouter();
   const { isSignedIn, isLoaded } = useAuth();
   const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexLoading } =
     useConvexAuth();
@@ -453,7 +455,6 @@ export default function Home() {
   const preferences = useQuery(api.users.viewerPreferences);
 
   const [activeFlavor, setActiveFlavor] = useState<string | null>(null);
-  const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [activeVibe, setActiveVibe] = useState<string | null>(null);
   const [activeAudience, setActiveAudience] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -464,7 +465,6 @@ export default function Home() {
 
   const posts = useQuery(api.posts.list, {
     flavorSlug: activeFlavor ?? undefined,
-    collectionSlug: activeCollection ?? undefined,
     tagSlug: activeVibe ?? undefined,
     audienceSlug: activeAudience ?? undefined,
     sort,
@@ -478,14 +478,10 @@ export default function Home() {
   const toggleMediaReaction = useMutation(api.reactions.toggleMedia);
   const setPreferences = useMutation(api.users.setPreferences);
 
-  const activeCollectionDoc = collections?.find(
-    (collection) => collection.slug === activeCollection
-  );
   const [selectedCollectionIdOverride, setSelectedCollectionIdOverride] =
     useState<Id<"collections"> | null>(null);
   const selectedCollectionId =
     selectedCollectionIdOverride ??
-    activeCollectionDoc?._id ??
     collections?.[0]?._id ??
     null;
 
@@ -711,10 +707,7 @@ export default function Home() {
       <FlavorNav
         flavors={flavors}
         activeFlavor={activeFlavor}
-        setActiveFlavor={(slug) => {
-          setActiveFlavor(slug);
-          setActiveCollection(null);
-        }}
+        setActiveFlavor={setActiveFlavor}
       />
 
       <main className="relative z-10 mx-auto w-full max-w-[920px] px-4 py-8">
@@ -747,10 +740,10 @@ export default function Home() {
               {showFilters ? "Hide filters" : "Filters"}
             </button>
             <select
-              value={activeCollection ?? ""}
+              value=""
               onChange={(event) => {
-                setActiveCollection(event.target.value || null);
-                setActiveFlavor(null);
+                const slug = event.target.value;
+                router.push(slug ? `/collections/${slug}` : "/collections");
               }}
               className="wc-input h-11 min-w-0 flex-1 text-sm font-bold"
             >

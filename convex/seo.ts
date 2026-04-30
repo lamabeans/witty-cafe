@@ -15,6 +15,13 @@ const DEFAULT_IDEA_LIMIT = 50;
 const MIN_INDEXABLE_POSTS = 2;
 const MIN_HELPFUL_TEXT_LENGTH = 80;
 const MIN_INDEXABLE_POSTS_WITHOUT_INTRO = 5;
+const SITEMAP_POST_LIMIT = 1000;
+
+const sortValidator = v.union(
+  v.literal("popular"),
+  v.literal("new"),
+  v.literal("discussed")
+);
 
 type CollectionStats = {
   postCount: number;
@@ -89,6 +96,35 @@ function rankPost(post: Doc<"posts">, reactionTotal: number) {
 
 function basePostRank(post: Doc<"posts">) {
   return rankPost(post, 0);
+}
+
+function sortPosts(
+  posts: Array<Doc<"posts">>,
+  sort: "popular" | "new" | "discussed"
+) {
+  return [...posts].sort((a, b) => {
+    if (sort === "new") return b.createdAt - a.createdAt;
+    if (sort === "discussed") {
+      const commentDiff = b.commentCount - a.commentCount;
+      if (commentDiff !== 0) return commentDiff;
+      return basePostRank(b) - basePostRank(a);
+    }
+    return basePostRank(b) - basePostRank(a);
+  });
+}
+
+function sortIdeas<
+  T extends { rankScore: number; createdAt: number; commentCount: number },
+>(ideas: T[], sort: "popular" | "new" | "discussed") {
+  return [...ideas].sort((a, b) => {
+    if (sort === "new") return b.createdAt - a.createdAt;
+    if (sort === "discussed") {
+      const commentDiff = b.commentCount - a.commentCount;
+      if (commentDiff !== 0) return commentDiff;
+      return b.rankScore - a.rankScore;
+    }
+    return b.rankScore - a.rankScore;
+  });
 }
 
 function defaultFlavor(slug: string) {
@@ -284,6 +320,8 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
       url,
       mediaType: item.mediaType ?? "unknown",
       altText: item.altText ?? item.imageName ?? item.filename ?? post.title,
+      duration: item.duration ?? null,
+      filename: item.filename ?? item.imageName ?? null,
     });
   }
 
@@ -340,8 +378,10 @@ export const collectionPage = query({
   args: {
     slug: v.string(),
     limit: v.optional(v.number()),
+    sort: v.optional(sortValidator),
   },
   handler: async (ctx, args) => {
+    const sort = args.sort ?? "popular";
     const collection = await ctx.db
       .query("collections")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -364,9 +404,7 @@ export const collectionPage = query({
     );
     const ideas = [];
     const ideaLimit = args.limit ?? DEFAULT_IDEA_LIMIT;
-    const topPosts = posts
-      .sort((a, b) => basePostRank(b) - basePostRank(a))
-      .slice(0, ideaLimit);
+    const topPosts = sortPosts(posts, sort).slice(0, ideaLimit);
 
     for (const post of topPosts) {
       ideas.push(await ideaSummary(ctx, post));
@@ -394,13 +432,127 @@ export const collectionPage = query({
 
     return {
       collection: summary,
-      ideas: ideas
-        .sort((a, b) => b.rankScore - a.rankScore)
-        .slice(0, args.limit ?? DEFAULT_IDEA_LIMIT),
+      ideas: sortIdeas(ideas, sort).slice(0, args.limit ?? DEFAULT_IDEA_LIMIT),
       relatedCollections: related
         .filter((item) => item.indexable)
         .sort((a, b) => b.postCount - a.postCount)
         .slice(0, 6),
+      sort,
+    };
+  },
+});
+
+export const postPage = query({
+  args: {
+    postId: v.id("posts"),
+  },
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get(args.postId);
+    if (!post) return null;
+
+    const collection = post.collectionId ? await ctx.db.get(post.collectionId) : null;
+    const fallbackCollection = collection
+      ? null
+      : await loadCollections(ctx).then((collections) =>
+          collections.find((candidate) => postBelongsToCollection(post, candidate))
+        );
+    const activeCollection = collection ?? fallbackCollection ?? null;
+    const collectionSummary = activeCollection
+      ? await summarizeCollection(
+          ctx,
+          activeCollection,
+          statsFromPosts(activeCollection, await postsForCollection(ctx, activeCollection))
+        )
+      : null;
+    const idea = await ideaSummary(ctx, post);
+
+    return {
+      idea,
+      collection: collectionSummary,
+      nsfw: post.nsfw ?? false,
+    };
+  },
+});
+
+export const sitemapEntries = query({
+  handler: async (ctx) => {
+    const collections = await loadCollections(ctx);
+    const posts = await ctx.db
+      .query("posts")
+      .withIndex("by_createdAt", (q) => q)
+      .order("desc")
+      .take(SITEMAP_POST_LIMIT);
+    const stats = statsByCollection(collections, posts);
+    const collectionSummaries = [];
+
+    for (const collection of collections) {
+      collectionSummaries.push(
+        await summarizeCollection(
+          ctx,
+          collection,
+          stats.get(collection._id) ?? statsFromPosts(collection, [])
+        )
+      );
+    }
+
+    const mediaItems = await ctx.db.query("mediaItems").collect();
+    const postById = new Map(posts.map((post) => [post._id, post]));
+    const mediaByPost = new Map<
+      string,
+      Array<{ url: string; mediaType: string; altText: string | null }>
+    >();
+    const mediaByCollection = new Map<
+      string,
+      Array<{ url: string; mediaType: string; altText: string | null }>
+    >();
+    for (const item of mediaItems) {
+      const url =
+        (item.storageId ? await ctx.storage.getUrl(item.storageId) : null) ??
+        item.imageUrl ??
+        item.imageFile ??
+        null;
+      if (!url) continue;
+      const mediaEntry = {
+        url,
+        mediaType: item.mediaType ?? "unknown",
+        altText: item.altText ?? item.imageName ?? item.filename ?? null,
+      };
+      const existing = mediaByPost.get(item.postId) ?? [];
+      if (existing.length < 3) existing.push(mediaEntry);
+      mediaByPost.set(item.postId, existing);
+
+      const post = postById.get(item.postId);
+      const rawPost = post as PostWithLegacyCollection | undefined;
+      const collectionId = rawPost?.collectionId ?? rawPost?.subredditId;
+      if (collectionId) {
+        const collectionMedia = mediaByCollection.get(collectionId) ?? [];
+        if (collectionMedia.length < 10) collectionMedia.push(mediaEntry);
+        mediaByCollection.set(collectionId, collectionMedia);
+      }
+    }
+
+    const indexableCollectionIds = new Set(
+      collectionSummaries
+        .filter((collection) => collection.indexable)
+        .map((collection) => collection._id)
+    );
+
+    return {
+      collections: collectionSummaries.map((collection) => ({
+        ...collection,
+        media: mediaByCollection.get(collection._id) ?? [],
+      })),
+      posts: posts
+        .filter((post) => {
+          const rawPost = post as PostWithLegacyCollection;
+          const collectionId = rawPost.collectionId ?? rawPost.subredditId;
+          return !post.nsfw && Boolean(collectionId && indexableCollectionIds.has(collectionId));
+        })
+        .map((post) => ({
+          _id: post._id,
+          lastModified: post.modifiedAt ?? post.createdAt,
+          media: mediaByPost.get(post._id) ?? [],
+        })),
     };
   },
 });

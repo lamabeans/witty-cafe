@@ -3,11 +3,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../convex/_generated/api";
-import { absoluteUrl, stripBbCode, truncateText } from "../../lib/site";
+import { absoluteUrl, cleanMediaAltText, stripBbCode, truncateText } from "../../lib/site";
+import { imageUrlsFor, mediaObjectsFor } from "../../lib/structuredData";
 
 type CollectionPageProps = {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ sort?: string | string[] }>;
 };
+
+type CollectionSort = "popular" | "new" | "discussed";
+
+const SORT_OPTIONS: Array<{ value: CollectionSort; label: string }> = [
+  { value: "popular", label: "Popular" },
+  { value: "new", label: "Newest" },
+  { value: "discussed", label: "Most Discussed" },
+];
+
+function normalizeSort(value: string | string[] | undefined): CollectionSort {
+  const sort = Array.isArray(value) ? value[0] : value;
+  if (sort === "new" || sort === "discussed") return sort;
+  return "popular";
+}
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,6 +35,73 @@ function formatDate(timestamp: number) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function sortHref(slug: string, sort: CollectionSort) {
+  return sort === "popular"
+    ? `/collections/${slug}`
+    : `/collections/${slug}?sort=${sort}`;
+}
+
+function MediaPreview({
+  item,
+  title,
+}: {
+  item: {
+    url: string | null;
+    mediaType: "image" | "video" | "audio" | "model3d" | "game" | "unknown";
+    altText?: string | null;
+  };
+  title: string;
+}) {
+  if (!item.url) return null;
+  const label = cleanMediaAltText(item.altText, title);
+
+  if (item.mediaType === "image" || item.mediaType === "unknown") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={item.url}
+        alt={label}
+        className="h-28 w-36 shrink-0 rounded-lg border-2 border-[var(--stroke)] object-cover sm:h-32 sm:w-44"
+      />
+    );
+  }
+
+  if (item.mediaType === "video") {
+    return (
+      <video
+        src={item.url}
+        controls
+        preload="metadata"
+        aria-label={label}
+        className="h-28 w-36 shrink-0 rounded-lg border-2 border-[var(--stroke)] bg-black object-cover sm:h-32 sm:w-44"
+      />
+    );
+  }
+
+  if (item.mediaType === "audio") {
+    return (
+      <div className="flex h-28 w-64 shrink-0 flex-col justify-center gap-2 rounded-lg border-2 border-[var(--stroke)] bg-[var(--yellow-soft)] p-3 text-black sm:h-32">
+        <span className="text-xs font-black uppercase tracking-[0.14em]">
+          Audio
+        </span>
+        <audio src={item.url} controls preload="metadata" className="w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={item.url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex h-28 w-44 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--stroke)] bg-[var(--yellow-soft)] p-3 text-center text-xs font-black uppercase tracking-[0.12em] text-black sm:h-32"
+    >
+      <span>{item.mediaType === "model3d" ? "3D Model" : "Playable Game"}</span>
+      <span className="mt-2 normal-case tracking-normal">Open media</span>
+    </a>
+  );
 }
 
 export async function generateMetadata({
@@ -67,9 +150,14 @@ export async function generateMetadata({
   };
 }
 
-export default async function CollectionPage({ params }: CollectionPageProps) {
+export default async function CollectionPage({
+  params,
+  searchParams,
+}: CollectionPageProps) {
   const { slug } = await params;
-  const data = await fetchQuery(api.seo.collectionPage, { slug });
+  const { sort: sortParam } = (await searchParams) ?? {};
+  const sort = normalizeSort(sortParam);
+  const data = await fetchQuery(api.seo.collectionPage, { slug, sort });
 
   if (!data) notFound();
 
@@ -77,6 +165,36 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
   const intro = stripBbCode(collection.introduction || collection.description);
   const conclusion = stripBbCode(collection.conclusion);
   const pageUrl = absoluteUrl(`/collections/${collection.slug}`);
+  const ideaJsonLd = ideas.map((idea, index) => {
+    const mediaObjects = mediaObjectsFor(idea.media, idea.title);
+    const images = imageUrlsFor(idea.media);
+    return {
+      "@type": "ListItem",
+      position: index + 1,
+      item: {
+        "@type": "CreativeWork",
+        name: idea.title,
+        url: absoluteUrl(idea.href),
+        abstract: stripBbCode(idea.excerpt),
+        datePublished: new Date(idea.createdAt).toISOString(),
+        dateModified: new Date(idea.modifiedAt ?? idea.createdAt).toISOString(),
+        image: images.length ? images : undefined,
+        associatedMedia: mediaObjects.length ? mediaObjects : undefined,
+        interactionStatistic: [
+          {
+            "@type": "InteractionCounter",
+            interactionType: "https://schema.org/LikeAction",
+            userInteractionCount: idea.reactionTotal,
+          },
+          {
+            "@type": "InteractionCounter",
+            interactionType: "https://schema.org/CommentAction",
+            userInteractionCount: idea.commentCount,
+          },
+        ],
+      },
+    };
+  });
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -105,12 +223,7 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
       about: collection.flavor.name,
       mainEntity: {
         "@type": "ItemList",
-        itemListElement: ideas.map((idea, index) => ({
-          "@type": "ListItem",
-          position: index + 1,
-          name: idea.title,
-          url: absoluteUrl(idea.href),
-        })),
+        itemListElement: ideaJsonLd,
       },
     },
   ];
@@ -167,11 +280,24 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
         </header>
 
         <section className="mt-6 space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-display text-3xl font-black">Top Ideas</h2>
-            <Link href="/" className="wc-button">
-              Open Feed
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              {SORT_OPTIONS.map((option) => (
+                <Link
+                  key={option.value}
+                  href={sortHref(collection.slug, option.value)}
+                  className={`wc-button ${
+                    sort === option.value ? "wc-button-active" : ""
+                  }`}
+                >
+                  {option.label}
+                </Link>
+              ))}
+              <Link href="/" className="wc-button">
+                Open Feed
+              </Link>
+            </div>
           </div>
 
           {ideas.map((idea, index) => (
@@ -206,12 +332,10 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
                 {idea.media.length ? (
                   <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
                     {idea.media.map((item) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <MediaPreview
                         key={item.url}
-                        src={item.url}
-                        alt={item.altText}
-                        className="h-28 w-36 shrink-0 rounded-lg border-2 border-[var(--stroke)] object-cover sm:h-32 sm:w-44"
+                        item={item}
+                        title={idea.title}
                       />
                     ))}
                   </div>
