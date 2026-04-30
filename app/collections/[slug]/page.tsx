@@ -3,8 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { absoluteUrl, cleanMediaAltText, stripBbCode, truncateText } from "../../lib/site";
 import { imageUrlsFor, mediaObjectsFor } from "../../lib/structuredData";
+import { CollectionIdeaActions } from "./CollectionIdeaActions";
 
 type CollectionPageProps = {
   params: Promise<{ slug: string }>;
@@ -44,9 +46,11 @@ function sortHref(slug: string, sort: CollectionSort) {
 }
 
 function MediaPreview({
+  href,
   item,
   title,
 }: {
+  href: string;
   item: {
     url: string | null;
     mediaType: "image" | "video" | "audio" | "model3d" | "game" | "unknown";
@@ -59,24 +63,32 @@ function MediaPreview({
 
   if (item.mediaType === "image" || item.mediaType === "unknown") {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={item.url}
-        alt={label}
-        className="h-28 w-36 shrink-0 rounded-lg border-2 border-[var(--stroke)] object-cover sm:h-32 sm:w-44"
-      />
+      <Link href={href} aria-label={`Open ${title}`} className="block shrink-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={item.url}
+          alt={label}
+          className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] object-cover transition hover:-translate-y-0.5 sm:h-32 sm:w-44"
+        />
+      </Link>
     );
   }
 
   if (item.mediaType === "video") {
     return (
-      <video
-        src={item.url}
-        controls
-        preload="metadata"
+      <Link
+        href={href}
         aria-label={label}
-        className="h-28 w-36 shrink-0 rounded-lg border-2 border-[var(--stroke)] bg-black object-cover sm:h-32 sm:w-44"
-      />
+        className="block shrink-0"
+      >
+        <video
+          src={item.url}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] bg-black object-cover transition hover:-translate-y-0.5 sm:h-32 sm:w-44"
+        />
+      </Link>
     );
   }
 
@@ -329,11 +341,13 @@ export default async function CollectionPage({
                     ))}
                   </div>
                 ) : null}
+                <CollectionIdeaActions postId={idea._id as Id<"posts">} />
                 {idea.media.length ? (
                   <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
                     {idea.media.map((item) => (
                       <MediaPreview
                         key={item.url}
+                        href={idea.href}
                         item={item}
                         title={idea.title}
                       />

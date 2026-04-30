@@ -9,7 +9,7 @@ export type CollectionSummary = Pick<Doc<"collections">, "name" | "slug"> | null
 
 export type TagSummary = Pick<Doc<"tags">, "name" | "slug">;
 
-export type ReactionKind = "like" | "funny" | "love" | "wow";
+export type ReactionKind = "like" | "funny" | "love" | "wow" | "keep" | "share";
 
 export type ReactionCounts = Record<ReactionKind, number>;
 

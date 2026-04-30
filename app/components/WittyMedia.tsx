@@ -83,14 +83,67 @@ export function ReactionBar({
   );
 }
 
+type MediaLoveButtonProps = {
+  active: boolean;
+  count: number;
+  canWrite: boolean;
+  busy?: boolean;
+  onLove: () => void;
+};
+
+function MediaLoveButton({
+  active,
+  count,
+  canWrite,
+  busy = false,
+  onLove,
+}: MediaLoveButtonProps) {
+  return (
+    <button
+      type="button"
+      disabled={!canWrite || busy}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onLove();
+      }}
+      className={[
+        "wc-button",
+        active ? "wc-button-active" : "",
+        "min-h-10",
+      ].join(" ")}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path
+          d="M12 20.2s-7.4-4.4-9.4-9.4C1 6.8 3.4 3.8 7 3.8c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 6 3 4.4 7-2 5-9.4 9.4-9.4 9.4Z"
+          fill="currentColor"
+        />
+      </svg>
+      <span>Love it</span>
+      <span>{formatCount(count)}</span>
+    </button>
+  );
+}
+
 type MediaTileProps = {
   item: MediaSummary;
   active?: boolean;
   large?: boolean;
   onOpen?: () => void;
+  canWrite?: boolean;
+  busy?: boolean;
+  onLove?: () => void;
 };
 
-export function MediaTile({ item, active = false, large = false, onOpen }: MediaTileProps) {
+export function MediaTile({
+  item,
+  active = false,
+  large = false,
+  onOpen,
+  canWrite = false,
+  busy = false,
+  onLove,
+}: MediaTileProps) {
   const hasUrl = Boolean(item.url);
   const className = large
     ? "relative flex h-full min-h-[280px] w-full items-center justify-center overflow-hidden rounded-[14px] border-2 border-[var(--stroke)] bg-[var(--canvas-2)]"
@@ -156,6 +209,32 @@ export function MediaTile({ item, active = false, large = false, onOpen }: Media
           {formatCount(item.rankScore)}
         </span>
       ) : null}
+      {large && onLove ? (
+        <button
+          type="button"
+          aria-label="Love it"
+          title="Love it"
+          disabled={!canWrite || busy}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onLove();
+          }}
+          className={[
+            "absolute right-3 top-3 inline-flex h-10 items-center gap-2 rounded-full border-2 border-black bg-white px-3 text-xs font-black text-black shadow-[2px_2px_0_var(--stroke)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60",
+            item.viewerReaction === "love" ? "bg-[var(--yellow)] shadow-[2px_2px_0_var(--magenta)]" : "",
+          ].join(" ")}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+            <path
+              d="M12 20.2s-7.4-4.4-9.4-9.4C1 6.8 3.4 3.8 7 3.8c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 6 3 4.4 7-2 5-9.4 9.4-9.4 9.4Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span>Love it</span>
+          <span>{formatCount(item.reactionCounts.love)}</span>
+        </button>
+      ) : null}
     </>
   );
 
@@ -179,9 +258,19 @@ type MediaStripProps = {
   items: MediaSummary[];
   layout: "compact" | "hero";
   onOpen: (index: number) => void;
+  canWrite?: boolean;
+  busyMediaItemId?: MediaSummary["_id"] | null;
+  onLove?: (mediaItemId: MediaSummary["_id"]) => void;
 };
 
-export function MediaStrip({ items, layout, onOpen }: MediaStripProps) {
+export function MediaStrip({
+  items,
+  layout,
+  onOpen,
+  canWrite = false,
+  busyMediaItemId = null,
+  onLove,
+}: MediaStripProps) {
   const visible = items.filter((item) => item.url);
   if (visible.length === 0) return null;
 
@@ -189,7 +278,14 @@ export function MediaStrip({ items, layout, onOpen }: MediaStripProps) {
     const [lead, ...rest] = visible;
     return (
       <div className="mt-4 space-y-3">
-        <MediaTile item={lead} large onOpen={() => onOpen(0)} />
+        <MediaTile
+          item={lead}
+          large
+          onOpen={() => onOpen(0)}
+          canWrite={canWrite}
+          busy={busyMediaItemId === lead._id}
+          onLove={onLove ? () => onLove(lead._id) : undefined}
+        />
         {rest.length > 0 ? (
           <div className="flex gap-3 overflow-x-auto pb-2">
             {rest.map((item, index) => (
@@ -277,12 +373,12 @@ export function MediaViewer({
             ) : null}
           </div>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <ReactionBar
-              counts={active.reactionCounts}
-              viewerReaction={active.viewerReaction}
+            <MediaLoveButton
+              active={active.viewerReaction === "love"}
+              count={active.reactionCounts.love}
               canWrite={canWrite}
               busy={busy}
-              onReact={(kind) => onReact(active._id, kind)}
+              onLove={() => onReact(active._id, "love")}
             />
             <p className="text-sm font-bold text-[var(--muted)]">
               {activeIndex + 1} / {visible.length} media

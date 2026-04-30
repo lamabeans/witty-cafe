@@ -6,7 +6,9 @@ const reactionKindValidator = v.union(
   v.literal("like"),
   v.literal("funny"),
   v.literal("love"),
-  v.literal("wow")
+  v.literal("wow"),
+  v.literal("keep"),
+  v.literal("share")
 );
 
 export const togglePost = mutation({

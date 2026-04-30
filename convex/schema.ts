@@ -140,7 +140,9 @@ export default defineSchema({
       v.literal("like"),
       v.literal("funny"),
       v.literal("love"),
-      v.literal("wow")
+      v.literal("wow"),
+      v.literal("keep"),
+      v.literal("share")
     ),
     createdAt: v.number(),
     modifiedAt: v.optional(v.number()),
@@ -155,7 +157,9 @@ export default defineSchema({
       v.literal("like"),
       v.literal("funny"),
       v.literal("love"),
-      v.literal("wow")
+      v.literal("wow"),
+      v.literal("keep"),
+      v.literal("share")
     ),
     createdAt: v.number(),
     modifiedAt: v.optional(v.number()),

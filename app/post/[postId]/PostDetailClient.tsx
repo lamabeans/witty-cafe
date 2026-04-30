@@ -594,6 +594,13 @@ export default function PostDetailClient({
                   items={post.media}
                   layout="hero"
                   onOpen={(index) => setMediaIndex(index)}
+                  canWrite={canWrite}
+                  busyMediaItemId={
+                    busyReaction?.startsWith("media:")
+                      ? (busyReaction.slice("media:".length) as Id<"mediaItems">)
+                      : null
+                  }
+                  onLove={(mediaItemId) => handleMediaReaction(mediaItemId, "love")}
                 />
 
                 <div className="mt-6 flex flex-col gap-3 border-t-2 border-[var(--stroke)] pt-4 sm:flex-row sm:items-center sm:justify-between">

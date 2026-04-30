@@ -28,7 +28,14 @@ import type {
 
 const DEFAULT_LIMIT = 40;
 
-const REACTION_KINDS: ReactionKind[] = ["like", "funny", "love", "wow"];
+const REACTION_KINDS: ReactionKind[] = [
+  "like",
+  "funny",
+  "love",
+  "wow",
+  "keep",
+  "share",
+];
 
 const mediaTypeValidator = v.union(
   v.literal("image"),
@@ -74,6 +81,8 @@ function emptyReactionCounts(): ReactionCounts {
     funny: 0,
     love: 0,
     wow: 0,
+    keep: 0,
+    share: 0,
   };
 }
 
