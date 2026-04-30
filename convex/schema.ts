@@ -64,7 +64,7 @@ export default defineSchema({
   })
     .index("by_slug", ["slug"])
     .index("by_sortOrder", ["sortOrder"]),
-  subreddits: defineTable({
+  collections: defineTable({
     name: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
@@ -87,7 +87,7 @@ export default defineSchema({
     contentJson: v.optional(v.any()),
     legacyBody: v.optional(v.string()),
     plainTextExcerpt: v.optional(v.string()),
-    subredditId: v.id("subreddits"),
+    collectionId: v.id("collections"),
     authorId: v.optional(v.id("users")),
     createdAt: v.number(),
     modifiedAt: v.optional(v.number()),
@@ -98,7 +98,7 @@ export default defineSchema({
     legacyId: v.optional(v.string()),
     postContentLegacyId: v.optional(v.string()),
   })
-    .index("by_subreddit", ["subredditId"])
+    .index("by_collection", ["collectionId"])
     .index("by_createdAt", ["createdAt"])
     .index("by_legacyId", ["legacyId"]),
   comments: defineTable({
@@ -163,13 +163,13 @@ export default defineSchema({
     .index("by_media", ["mediaItemId"])
     .index("by_user", ["userId"])
     .index("by_media_user", ["mediaItemId", "userId"]),
-  subredditMembers: defineTable({
-    subredditId: v.id("subreddits"),
+  collectionMembers: defineTable({
+    collectionId: v.id("collections"),
     userId: v.id("users"),
   })
-    .index("by_subreddit", ["subredditId"])
+    .index("by_collection", ["collectionId"])
     .index("by_user", ["userId"])
-    .index("by_user_subreddit", ["userId", "subredditId"]),
+    .index("by_user_collection", ["userId", "collectionId"]),
   mediaItems: defineTable({
     postId: v.id("posts"),
     legacyGalleryId: v.string(),
@@ -269,4 +269,7 @@ export default defineSchema({
     .index("by_requester_day", ["requesterId", "dayKey"])
     .index("by_status", ["status"])
     .index("by_openAiJobId", ["openAiJobId"]),
+}, {
+  schemaValidation: false,
+  strictTableNameTypes: false,
 });

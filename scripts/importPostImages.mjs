@@ -236,7 +236,7 @@ function normalizePost(post) {
   const body = normalizeText(post.body ?? post.legacyBody ?? "");
   const excerpt = normalizeText(post.plainTextExcerpt ?? "");
   const community = normalizeText(
-    `${post.subreddit?.name ?? ""} ${post.subreddit?.slug ?? ""}`
+    `${post.collection?.name ?? ""} ${post.collection?.slug ?? ""}`
   );
   const combined = normalizeText(`${post.title ?? ""} ${post.body ?? ""} ${post.legacyBody ?? ""} ${post.plainTextExcerpt ?? ""}`);
 
@@ -400,7 +400,7 @@ function safeReportMatch(match) {
     variantCount: match.group.entries.length,
     postId: match.best?.post._id ?? null,
     postTitle: match.best?.post.title ?? null,
-    community: match.best?.post.subreddit?.name ?? null,
+    collection: match.best?.post.collection?.name ?? null,
     importOrder: match.importOrder ?? null,
     score: match.best?.score ?? null,
     confidence: match.best ? confidenceFor(match.best.score) : null,

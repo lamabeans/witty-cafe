@@ -14,6 +14,9 @@
     "migrate:rich-text": "node scripts/migrateRichText.mjs",
     "migrate:redesign:dry-run": "node scripts/applyRedesignMigrations.mjs --dry-run",
     "migrate:redesign": "node scripts/applyRedesignMigrations.mjs --apply --seed-reactions",
+    "migrate:collections:dry-run": "node scripts/migrateCollections.mjs",
+    "migrate:collections": "node scripts/migrateCollections.mjs --apply",
+    "migrate:collections:cleanup": "node scripts/migrateCollections.mjs --apply --delete-legacy",
     "import:post-images:dry-run": "node scripts/importPostImages.mjs --dry-run",
     "import:post-images": "node scripts/importPostImages.mjs --import"
   },

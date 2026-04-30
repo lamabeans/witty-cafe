@@ -77,13 +77,13 @@ if (!convexUrl) {
   process.exit(1);
 }
 
-const subredditsRaw = readJson(path.join(dataDir, "subreddits.json"));
+const collectionsRaw = readJson(path.join(dataDir, "subreddits.json"));
 const tagsRaw = readJson(path.join(dataDir, "tags.json"));
 const postsRaw = readJson(path.join(dataDir, "posts.json"));
 const postContentRaw = readJson(path.join(dataDir, "postcontent.json"));
 
-const subredditLookup = new Map();
-const subreddits = subredditsRaw.map((row, index) => {
+const collectionLookup = new Map();
+const collections = collectionsRaw.map((row, index) => {
   const name =
     pickValue(row, ["name", "title", "subreddit", "community"]) ||
     `Community ${index + 1}`;
@@ -96,9 +96,9 @@ const subreddits = subredditsRaw.map((row, index) => {
     description: pickValue(row, ["description", "about"]) || undefined,
     createdAt: toTimestamp(pickValue(row, ["createdAt", "created_at"])) || undefined,
   };
-  subredditLookup.set(legacyId, record);
-  subredditLookup.set(String(slug), record);
-  subredditLookup.set(String(name).toLowerCase(), record);
+  collectionLookup.set(legacyId, record);
+  collectionLookup.set(String(slug), record);
+  collectionLookup.set(String(name).toLowerCase(), record);
   return record;
 });
 
@@ -133,7 +133,7 @@ const posts = postsRaw.map((row, index) => {
     pickValue(row, ["body", "content", "text"]) ||
     contentByPostId.get(String(legacyId)) ||
     undefined;
-  const subredditRef = pickValue(row, [
+  const collectionRef = pickValue(row, [
     "subredditId",
     "subreddit_id",
     "communityId",
@@ -141,12 +141,12 @@ const posts = postsRaw.map((row, index) => {
     "subreddit",
     "community",
   ]);
-  const subredditRecord =
-    subredditLookup.get(String(subredditRef)) ||
-    subredditLookup.get(String(subredditRef ?? "").toLowerCase());
-  const subredditLegacyId = subredditRecord
-    ? subredditRecord.legacyId
-    : subreddits[0]?.legacyId;
+  const collectionRecord =
+    collectionLookup.get(String(collectionRef)) ||
+    collectionLookup.get(String(collectionRef ?? "").toLowerCase());
+  const collectionLegacyId = collectionRecord
+    ? collectionRecord.legacyId
+    : collections[0]?.legacyId;
 
   const tagRefs = ensureArray(
     pickValue(row, ["tags", "tagIds", "tag_ids", "tagSlugs"])
@@ -160,7 +160,7 @@ const posts = postsRaw.map((row, index) => {
     legacyId: String(legacyId),
     title: String(title),
     body: body ? String(body) : undefined,
-    subredditLegacyId: String(subredditLegacyId || ""),
+    collectionLegacyId: String(collectionLegacyId || ""),
     createdAt: toTimestamp(pickValue(row, ["createdAt", "created_at"])) || undefined,
     score: Number(pickValue(row, ["score", "votes"])) || 0,
     commentCount: Number(pickValue(row, ["commentCount", "comments"])) || 0,
@@ -168,7 +168,7 @@ const posts = postsRaw.map((row, index) => {
   };
 });
 
-if (!subreddits.length || !posts.length) {
+if (!collections.length || !posts.length) {
   console.warn(
     "Import skipped: subreddits.json or posts.json is empty. Check your data files."
   );
@@ -178,7 +178,7 @@ if (!subreddits.length || !posts.length) {
 const client = new ConvexHttpClient(convexUrl);
 
 const result = await client.mutation(api.importer.importAll, {
-  subreddits,
+  collections,
   tags,
   posts,
   comments: [],

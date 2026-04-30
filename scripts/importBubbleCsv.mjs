@@ -5,7 +5,7 @@ const DEFAULT_LIVE_DIR = "/Users/macofchris/Desktop/witty cafe live database";
 const DEFAULT_DEV_DIR = "/Users/macofchris/Desktop/witty cafe cvs development database";
 const BUBBLE_ID_RE = /\b\d{13}x\d{15,18}\b/g;
 const EXPECTED_LIVE_COUNTS = {
-  subreddits: 45,
+  collections: 45,
   tags: 13,
   users: 8,
   posts: 684,
@@ -132,7 +132,7 @@ function readTables(dataDir) {
     imageContents: readCsv(findCsv(dataDir, "All-Image-Contents")),
     postContents: readCsv(findCsv(dataDir, "All-Post-Contents")),
     posts: readCsv(findCsv(dataDir, "All-Posts")),
-    subreddits: readCsv(findCsv(dataDir, "All-Subreddits-modified")),
+    collections: readCsv(findCsv(dataDir, "All-Subreddits-modified")),
     tags: readCsv(findCsv(dataDir, "All-Tags")),
     users: readCsv(findCsv(dataDir, "All-Users")),
   };
@@ -277,16 +277,16 @@ function buildPayload(tables) {
   const warnings = [];
   const errors = [];
 
-  const subredditRefs = collectIds(tables.posts, ["OG-subreddit"]).concat(
+  const collectionRefs = collectIds(tables.posts, ["OG-subreddit"]).concat(
     collectIds(tables.users, ["Joined-subreddits"])
   );
   const tagRefs = collectIds(tables.postContents, ["OG-tags"]);
   const postContentRefs = collectIds(tables.galleries, ["OG-post-content"]);
 
-  const subredditIds = inferIdsForRows(
-    tables.subreddits,
-    unique(subredditRefs),
-    "subreddits",
+  const collectionIds = inferIdsForRows(
+    tables.collections,
+    unique(collectionRefs),
+    "collections",
     warnings,
     errors
   );
@@ -310,7 +310,7 @@ function buildPayload(tables) {
     );
   }
 
-  const subredditIdSet = new Set(subredditIds.filter(Boolean));
+  const collectionIdSet = new Set(collectionIds.filter(Boolean));
   const tagIdSet = new Set(tagIds.filter(Boolean));
   const postLegacyIds = tables.postContents.map((row) => extractIds(row["OG-post"])[0]);
   const postLegacyIdSet = new Set(postLegacyIds.filter(Boolean));
@@ -337,15 +337,15 @@ function buildPayload(tables) {
       username: String(row.Username ?? "").trim() || undefined,
       createdAt: parseBubbleDate(row["Creation Date"]),
       modifiedAt: parseBubbleDate(row["Modified Date"]),
-      joinedSubredditLegacyIds: splitList(row["Joined-subreddits"]).filter((id) =>
-        subredditIdSet.has(id)
+      joinedCollectionLegacyIds: splitList(row["Joined-subreddits"]).filter((id) =>
+        collectionIdSet.has(id)
       ),
     };
   });
   const userEmails = new Set(users.map((user) => user.email).filter(Boolean));
 
-  const subreddits = tables.subreddits.map((row, index) => ({
-    legacyId: subredditIds[index],
+  const collections = tables.collections.map((row, index) => ({
+    legacyId: collectionIds[index],
     name: String(row.Name ?? "").trim() || `Community ${index + 1}`,
     slug: slugify(row.Name || `Community ${index + 1}`),
     description: String(row.Description ?? "").trim() || undefined,
@@ -389,7 +389,7 @@ function buildPayload(tables) {
       postContentLegacyId,
       title,
       body: body || undefined,
-      subredditLegacyId: extractIds(postRow["OG-subreddit"])[0] ?? "",
+      collectionLegacyId: extractIds(postRow["OG-subreddit"])[0] ?? "",
       createdAt: parseBubbleDate(postRow["Creation Date"]),
       modifiedAt: parseBubbleDate(postRow["Modified Date"]),
       score: numberOrUndefined(postRow.TotalVotes) ?? 0,
@@ -430,8 +430,8 @@ function buildPayload(tables) {
   for (const [index, post] of posts.entries()) {
     if (!post.legacyId) errors.push(`post ${index + 1}: missing OG-post legacy ID`);
     if (!post.title.trim()) errors.push(`post ${index + 1}: blank generated title`);
-    if (!subredditIdSet.has(post.subredditLegacyId)) {
-      errors.push(`post ${post.legacyId}: unresolved subreddit ${post.subredditLegacyId}`);
+    if (!collectionIdSet.has(post.collectionLegacyId)) {
+      errors.push(`post ${post.legacyId}: unresolved collection ${post.collectionLegacyId}`);
     }
     for (const tagLegacyId of splitList(tables.postContents[index]?.["OG-tags"])) {
       if (!tagIdSet.has(tagLegacyId)) {
@@ -476,7 +476,7 @@ function buildPayload(tables) {
   }
 
   for (const [name, collection] of [
-    ["subreddits", subreddits],
+    ["collections", collections],
     ["tags", tags],
     ["posts", posts],
     ["mediaItems", mediaItems],
@@ -501,10 +501,10 @@ function buildPayload(tables) {
   errors.push(...malformedDates);
 
   return {
-    payload: { users, subreddits, tags, posts, mediaItems },
+    payload: { users, collections, tags, posts, mediaItems },
     report: {
       counts: {
-        subreddits: subreddits.length,
+        collections: collections.length,
         tags: tags.length,
         users: users.length,
         posts: posts.length,
@@ -514,7 +514,7 @@ function buildPayload(tables) {
         mediaItems: mediaItems.length,
       },
       relationIds: {
-        subreddits: subredditIdSet.size,
+        collections: collectionIdSet.size,
         tags: tagIdSet.size,
         posts: postLegacyIdSet.size,
         postContents: postContentIdSet.size,
@@ -606,7 +606,7 @@ async function main() {
     result,
     await client.mutation(api.importer.importAll, {
       users: payload.users,
-      subreddits: payload.subreddits,
+      collections: payload.collections,
       tags: payload.tags,
       posts: [],
       mediaItems: [],
@@ -619,7 +619,7 @@ async function main() {
       result,
       await client.mutation(api.importer.importAll, {
         users: [],
-        subreddits: [],
+        collections: [],
         tags: [],
         posts,
         mediaItems: [],
@@ -636,7 +636,7 @@ async function main() {
       result,
       await client.mutation(api.importer.importAll, {
         users: [],
-        subreddits: [],
+        collections: [],
         tags: [],
         posts: [],
         mediaItems,

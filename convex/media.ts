@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { getOrCreateUser } from "./lib/getOrCreateUser";
 
 const importConfidenceValidator = v.union(
@@ -32,6 +33,16 @@ function requireImportToken(token: string) {
   }
 }
 
+type CollectionLike = Pick<Doc<"collections">, "name" | "slug">;
+
+type LegacyCollectionDb = {
+  get: (id: string) => Promise<CollectionLike | null>;
+};
+
+function legacyCollectionDb(db: unknown) {
+  return db as LegacyCollectionDb;
+}
+
 export const generateUploadUrl = mutation({
   handler: async (ctx) => {
     const user = await getOrCreateUser(ctx);
@@ -51,7 +62,12 @@ export const listPostsForImageImport = query({
     const posts = await ctx.db.query("posts").collect();
     const results = [];
     for (const post of posts) {
-      const subreddit = await ctx.db.get(post.subredditId);
+      const rawPost = post as Doc<"posts"> & { subredditId?: string };
+      const collection = post.collectionId
+        ? await ctx.db.get(post.collectionId)
+        : rawPost.subredditId
+          ? await legacyCollectionDb(ctx.db).get(rawPost.subredditId)
+          : null;
       results.push({
         _id: post._id,
         title: post.title,
@@ -59,10 +75,10 @@ export const listPostsForImageImport = query({
         legacyBody: post.legacyBody,
         plainTextExcerpt: post.plainTextExcerpt,
         createdAt: post.createdAt,
-        subreddit: subreddit
+        collection: collection
           ? {
-              name: subreddit.name,
-              slug: subreddit.slug,
+              name: collection.name,
+              slug: collection.slug,
             }
           : null,
       });

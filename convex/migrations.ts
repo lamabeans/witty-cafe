@@ -1,6 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   bbcodeToRichText,
   excerptFromText,
@@ -12,6 +12,46 @@ import {
   inferAudienceSlugs,
   inferFlavorSlug,
 } from "./lib/taxonomy";
+
+type LegacyCollection = Doc<"collections"> & {
+  _id: string;
+  _creationTime?: number;
+};
+
+type LegacyMember = {
+  _id: string;
+  userId: Id<"users">;
+  subredditId: string;
+};
+
+type LegacyPost = Doc<"posts"> & {
+  collectionId?: Id<"collections">;
+  subredditId?: string;
+};
+
+type LegacyCollectQuery<T> = {
+  collect: () => Promise<T[]>;
+};
+
+type LegacyMigrationDb = {
+  query: {
+    (tableName: "subreddits"): LegacyCollectQuery<LegacyCollection>;
+    (tableName: "subredditMembers"): LegacyCollectQuery<LegacyMember>;
+    (tableName: "posts"): LegacyCollectQuery<LegacyPost>;
+  };
+  replace: (id: Id<"posts">, value: Record<string, unknown>) => Promise<void>;
+  delete: (id: string) => Promise<void>;
+};
+
+function legacyMigrationDb(db: unknown) {
+  return db as LegacyMigrationDb;
+}
+
+function compactRecord<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  ) as T;
+}
 
 export const convertLegacyBodies = mutation({
   args: {
@@ -95,7 +135,7 @@ export const applyDefaultTaxonomy = mutation({
       }
     }
 
-    const collections = await ctx.db.query("subreddits").collect();
+    const collections = await ctx.db.query("collections").collect();
     for (const collection of collections) {
       const flavorSlug = inferFlavorSlug(collection.name);
       const audienceSlugs = inferAudienceSlugs(collection.name);
@@ -129,6 +169,175 @@ export const applyDefaultTaxonomy = mutation({
       audiencesCreated,
       collectionsUpdated,
       unresolvedCollections,
+    };
+  },
+});
+
+export const migrateCollectionsFromLegacy = mutation({
+  args: {
+    dryRun: v.optional(v.boolean()),
+    deleteLegacy: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const dryRun = args.dryRun ?? true;
+    const deleteLegacy = args.deleteLegacy ?? false;
+    const db = legacyMigrationDb(ctx.db);
+    const now = Date.now();
+    const legacyCollections = await db.query("subreddits").collect();
+    const legacyMembers = await db.query("subredditMembers").collect();
+    const posts = await db.query("posts").collect();
+    const legacyToCollectionId = new Map<string, Id<"collections">>();
+    const unresolvedPosts = [];
+    let collectionsCreated = 0;
+    let collectionsUpdated = 0;
+    let postsPatched = 0;
+    let membershipsCreated = 0;
+    let membershipsSkipped = 0;
+    let legacyCollectionsDeleted = 0;
+    let legacyMembershipsDeleted = 0;
+
+    for (const legacy of legacyCollections) {
+      const existingByLegacy = legacy.legacyId
+        ? await ctx.db
+            .query("collections")
+            .withIndex("by_legacyId", (q) => q.eq("legacyId", legacy.legacyId))
+            .unique()
+        : null;
+      const existingBySlug = existingByLegacy
+        ? null
+        : await ctx.db
+            .query("collections")
+            .withIndex("by_slug", (q) => q.eq("slug", legacy.slug))
+            .unique();
+      const existing = existingByLegacy ?? existingBySlug;
+      const collectionDoc = compactRecord({
+        name: legacy.name,
+        slug: legacy.slug,
+        description: legacy.description,
+        introduction: legacy.introduction,
+        conclusion: legacy.conclusion,
+        bannerImage: legacy.bannerImage,
+        flavorId: legacy.flavorId,
+        audienceIds: legacy.audienceIds,
+        nsfw: legacy.nsfw,
+        moderatorEmails: legacy.moderatorEmails,
+        createdAt: legacy.createdAt ?? legacy._creationTime ?? now,
+        modifiedAt: legacy.modifiedAt ?? now,
+        legacyId: legacy.legacyId,
+      });
+
+      if (existing) {
+        legacyToCollectionId.set(legacy._id, existing._id);
+        if (!dryRun) {
+          await ctx.db.patch(existing._id, collectionDoc);
+        }
+        collectionsUpdated += 1;
+      } else {
+        collectionsCreated += 1;
+        if (!dryRun) {
+          const collectionId = await ctx.db.insert("collections", collectionDoc);
+          legacyToCollectionId.set(legacy._id, collectionId);
+        }
+      }
+    }
+
+    if (dryRun) {
+      for (const legacy of legacyCollections) {
+        if (!legacyToCollectionId.has(legacy._id)) {
+          legacyToCollectionId.set(legacy._id, legacy._id);
+        }
+      }
+    }
+
+    for (const post of posts) {
+      const collectionId =
+        post.collectionId ??
+        (post.subredditId ? legacyToCollectionId.get(post.subredditId) : null);
+      if (!collectionId) {
+        unresolvedPosts.push(post._id);
+        continue;
+      }
+      if (post.collectionId === collectionId && post.subredditId === undefined) {
+        continue;
+      }
+
+      postsPatched += 1;
+      if (!dryRun) {
+        await db.replace(
+          post._id,
+          compactRecord({
+            title: post.title,
+            body: post.body,
+            contentJson: post.contentJson,
+            legacyBody: post.legacyBody,
+            plainTextExcerpt: post.plainTextExcerpt,
+            collectionId,
+            authorId: post.authorId,
+            createdAt: post.createdAt,
+            modifiedAt: post.modifiedAt,
+            score: post.score,
+            commentCount: post.commentCount,
+            nsfw: post.nsfw,
+            upvoteEmails: post.upvoteEmails,
+            legacyId: post.legacyId,
+            postContentLegacyId: post.postContentLegacyId,
+          })
+        );
+      }
+    }
+
+    for (const member of legacyMembers) {
+      const collectionId = legacyToCollectionId.get(member.subredditId);
+      if (!collectionId) {
+        membershipsSkipped += 1;
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("collectionMembers")
+        .withIndex("by_user_collection", (q) =>
+          q.eq("userId", member.userId).eq("collectionId", collectionId)
+        )
+        .unique();
+      if (existing) {
+        membershipsSkipped += 1;
+      } else {
+        membershipsCreated += 1;
+        if (!dryRun) {
+          await ctx.db.insert("collectionMembers", {
+            userId: member.userId,
+            collectionId,
+          });
+        }
+      }
+
+      if (!dryRun && deleteLegacy) {
+        await db.delete(member._id);
+        legacyMembershipsDeleted += 1;
+      }
+    }
+
+    if (!dryRun && deleteLegacy) {
+      for (const legacy of legacyCollections) {
+        await db.delete(legacy._id);
+        legacyCollectionsDeleted += 1;
+      }
+    }
+
+    return {
+      dryRun,
+      deleteLegacy,
+      legacyCollections: legacyCollections.length,
+      legacyMemberships: legacyMembers.length,
+      posts: posts.length,
+      collectionsCreated,
+      collectionsUpdated,
+      postsPatched,
+      membershipsCreated,
+      membershipsSkipped,
+      legacyCollectionsDeleted,
+      legacyMembershipsDeleted,
+      unresolvedPosts,
     };
   },
 });

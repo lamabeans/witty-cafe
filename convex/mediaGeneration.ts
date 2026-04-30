@@ -59,6 +59,16 @@ const VIDEO_PRESETS: Record<string, string> = {
     "Create an 8-second cinematic social video with tasteful motion, strong lighting, and no real people.",
 };
 
+type CollectionLike = Pick<Doc<"collections">, "name" | "slug">;
+
+type LegacyCollectionDb = {
+  get: (id: string) => Promise<CollectionLike | null>;
+};
+
+function legacyCollectionDb(db: unknown) {
+  return db as LegacyCollectionDb;
+}
+
 const MODEL3D_PRESETS: Record<string, string> = {
   prop:
     "Create a low-poly Wavefront OBJ model for a single charming prop inspired by the post.",
@@ -1093,7 +1103,12 @@ export const startGeneration = internalMutation({
       throw new Error("Daily free beta quota used. Try again tomorrow.");
     }
 
-    const collection = await ctx.db.get(post.subredditId);
+    const rawPost = post as Doc<"posts"> & { subredditId?: string };
+    const collection = post.collectionId
+      ? await ctx.db.get(post.collectionId)
+      : rawPost.subredditId
+        ? await legacyCollectionDb(ctx.db).get(rawPost.subredditId)
+        : null;
     const tagLinks = await ctx.db
       .query("postTags")
       .withIndex("by_post", (q) => q.eq("postId", post._id))

@@ -105,6 +105,9 @@ function AppHeader({
           placeholder="Search ideas, collections, vibes"
           className="wc-input hidden h-10 min-w-0 flex-1 px-3 text-sm sm:block"
         />
+        <Link href="/collections" className="wc-button hidden sm:inline-flex">
+          Collections
+        </Link>
         <button type="button" onClick={onToggleDark} className="wc-button">
           {dark ? "Light" : "Dark"}
         </button>
@@ -231,9 +234,18 @@ function PostCard({
           >
             {post.flavor.name}
           </span>
-          <button className="text-xs font-bold text-[var(--muted)]" type="button">
-            {post.collection?.name ?? "Unsorted collection"}
-          </button>
+          {post.collection ? (
+            <Link
+              href={`/collections/${post.collection.slug}`}
+              className="text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            >
+              {post.collection.name}
+            </Link>
+          ) : (
+            <span className="text-xs font-bold text-[var(--muted)]">
+              Unsorted collection
+            </span>
+          )}
           <span className="ml-auto text-xs font-bold text-[var(--faint)]">
             {formatDate(post.createdAt)}
           </span>
@@ -279,9 +291,9 @@ function PostCard({
 }
 
 function ComposePanel({
-  subreddits,
-  selectedSubredditId,
-  setSelectedSubredditId,
+  collections,
+  selectedCollectionId,
+  setSelectedCollectionId,
   title,
   setTitle,
   body,
@@ -298,9 +310,9 @@ function ComposePanel({
   onSubmit,
   onCancel,
 }: {
-  subreddits: Array<Doc<"subreddits">> | undefined;
-  selectedSubredditId: Id<"subreddits"> | null;
-  setSelectedSubredditId: (id: Id<"subreddits"> | null) => void;
+  collections: Array<Doc<"collections">> | undefined;
+  selectedCollectionId: Id<"collections"> | null;
+  setSelectedCollectionId: (id: Id<"collections"> | null) => void;
   title: string;
   setTitle: (value: string) => void;
   body: string;
@@ -329,10 +341,10 @@ function ComposePanel({
             required
           />
           <select
-            value={selectedSubredditId ?? ""}
+            value={selectedCollectionId ?? ""}
             onChange={(event) =>
-              setSelectedSubredditId(
-                event.target.value ? (event.target.value as Id<"subreddits">) : null
+              setSelectedCollectionId(
+                event.target.value ? (event.target.value as Id<"collections">) : null
               )
             }
             className="wc-input h-12 text-sm font-bold"
@@ -341,7 +353,7 @@ function ComposePanel({
             <option value="" disabled>
               Collection
             </option>
-            {(subreddits ?? []).map((collection) => (
+            {(collections ?? []).map((collection) => (
               <option key={collection._id} value={collection._id}>
                 {collection.name}
               </option>
@@ -434,8 +446,8 @@ export default function Home() {
 
   const flavors = useQuery(api.flavors.list) as FlavorOption[] | undefined;
   const audiences = useQuery(api.audiences.list) as AudienceOption[] | undefined;
-  const subreddits = useQuery(api.subreddits.list) as
-    | Array<Doc<"subreddits">>
+  const collections = useQuery(api.collections.list) as
+    | Array<Doc<"collections">>
     | undefined;
   const vibes = useQuery(api.tags.list) as Array<Doc<"tags">> | undefined;
   const preferences = useQuery(api.users.viewerPreferences);
@@ -452,7 +464,7 @@ export default function Home() {
 
   const posts = useQuery(api.posts.list, {
     flavorSlug: activeFlavor ?? undefined,
-    subredditSlug: activeCollection ?? undefined,
+    collectionSlug: activeCollection ?? undefined,
     tagSlug: activeVibe ?? undefined,
     audienceSlug: activeAudience ?? undefined,
     sort,
@@ -460,21 +472,21 @@ export default function Home() {
   }) as EnrichedPost[] | undefined;
 
   const createPost = useMutation(api.posts.create);
-  const createSubreddit = useMutation(api.subreddits.create);
+  const createCollection = useMutation(api.collections.create);
   const generateUploadUrl = useMutation(api.media.generateUploadUrl);
   const togglePostReaction = useMutation(api.reactions.togglePost);
   const toggleMediaReaction = useMutation(api.reactions.toggleMedia);
   const setPreferences = useMutation(api.users.setPreferences);
 
-  const activeCollectionDoc = subreddits?.find(
+  const activeCollectionDoc = collections?.find(
     (collection) => collection.slug === activeCollection
   );
-  const [selectedSubredditIdOverride, setSelectedSubredditIdOverride] =
-    useState<Id<"subreddits"> | null>(null);
-  const selectedSubredditId =
-    selectedSubredditIdOverride ??
+  const [selectedCollectionIdOverride, setSelectedCollectionIdOverride] =
+    useState<Id<"collections"> | null>(null);
+  const selectedCollectionId =
+    selectedCollectionIdOverride ??
     activeCollectionDoc?._id ??
-    subreddits?.[0]?._id ??
+    collections?.[0]?._id ??
     null;
 
   const [composeOpen, setComposeOpen] = useState(false);
@@ -556,7 +568,7 @@ export default function Home() {
       setPostError(authPending ? "Finishing sign-in. Try again in a moment." : "Sign in to post.");
       return;
     }
-    if (!selectedSubredditId) {
+    if (!selectedCollectionId) {
       setPostError("Choose a Collection first.");
       return;
     }
@@ -593,7 +605,7 @@ export default function Home() {
         title: title.trim(),
         body: body.trim() || undefined,
         plainTextExcerpt: excerptFromBody(body),
-        subredditId: selectedSubredditId,
+        collectionId: selectedCollectionId,
         tagNames,
         mediaAttachments,
       });
@@ -623,7 +635,7 @@ export default function Home() {
 
     setIsCreatingCollection(true);
     try {
-      await createSubreddit({
+      await createCollection({
         name: collectionName.trim(),
         description: collectionDesc.trim() || undefined,
       });
@@ -743,7 +755,7 @@ export default function Home() {
               className="wc-input h-11 min-w-0 flex-1 text-sm font-bold"
             >
               <option value="">All Collections</option>
-              {(subreddits ?? []).map((collection) => (
+              {(collections ?? []).map((collection) => (
                 <option key={collection._id} value={collection.slug}>
                   {collection.name}
                 </option>
@@ -827,9 +839,9 @@ export default function Home() {
         {composeOpen ? (
           <div className="mb-5">
             <ComposePanel
-              subreddits={subreddits}
-              selectedSubredditId={selectedSubredditId}
-              setSelectedSubredditId={setSelectedSubredditIdOverride}
+              collections={collections}
+              selectedCollectionId={selectedCollectionId}
+              setSelectedCollectionId={setSelectedCollectionIdOverride}
               title={title}
               setTitle={setTitle}
               body={body}

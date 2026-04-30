@@ -551,9 +551,18 @@ export default function PostPage() {
                   >
                     {post.flavor.name}
                   </span>
-                  <span className="text-xs font-black text-[var(--muted)]">
-                    {post.collection?.name ?? "Unsorted collection"}
-                  </span>
+                  {post.collection ? (
+                    <Link
+                      href={`/collections/${post.collection.slug}`}
+                      className="text-xs font-black text-[var(--muted)] hover:text-[var(--ink)]"
+                    >
+                      {post.collection.name}
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-black text-[var(--muted)]">
+                      Unsorted collection
+                    </span>
+                  )}
                   <span className="text-xs font-bold text-[var(--faint)]">
                     {formatDate(post.createdAt)}
                   </span>
@@ -674,9 +683,16 @@ export default function PostPage() {
             <div className="mt-4 space-y-3 text-sm font-bold text-[var(--muted)]">
               <div className="flex items-center justify-between">
                 <span>Collection</span>
-                <span className="text-right text-[var(--ink)]">
-                  {post?.collection?.name ?? "..."}
-                </span>
+                {post?.collection ? (
+                  <Link
+                    href={`/collections/${post.collection.slug}`}
+                    className="text-right text-[var(--ink)] hover:text-[var(--magenta)]"
+                  >
+                    {post.collection.name}
+                  </Link>
+                ) : (
+                  <span className="text-right text-[var(--ink)]">...</span>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <span>Flavour</span>

@@ -9,6 +9,7 @@
  */
 
 import type * as audiences from "../audiences.js";
+import type * as collections from "../collections.js";
 import type * as comments from "../comments.js";
 import type * as flavors from "../flavors.js";
 import type * as importer from "../importer.js";
@@ -22,6 +23,7 @@ import type * as migrations from "../migrations.js";
 import type * as posts from "../posts.js";
 import type * as rag from "../rag.js";
 import type * as reactions from "../reactions.js";
+import type * as seo from "../seo.js";
 import type * as subreddits from "../subreddits.js";
 import type * as tags from "../tags.js";
 import type * as tasks from "../tasks.js";
@@ -37,6 +39,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   audiences: typeof audiences;
+  collections: typeof collections;
   comments: typeof comments;
   flavors: typeof flavors;
   importer: typeof importer;
@@ -50,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   posts: typeof posts;
   rag: typeof rag;
   reactions: typeof reactions;
+  seo: typeof seo;
   subreddits: typeof subreddits;
   tags: typeof tags;
   tasks: typeof tasks;

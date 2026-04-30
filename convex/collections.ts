@@ -65,7 +65,9 @@ export const create = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
 
-    if (existing) return existing._id;
+    if (existing) {
+      return existing._id;
+    }
 
     return await ctx.db.insert("collections", {
       name: args.name,

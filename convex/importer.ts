@@ -17,10 +17,10 @@ const userInput = v.object({
   username: v.optional(v.string()),
   createdAt: v.optional(v.number()),
   modifiedAt: v.optional(v.number()),
-  joinedSubredditLegacyIds: v.optional(v.array(v.string())),
+  joinedCollectionLegacyIds: v.optional(v.array(v.string())),
 });
 
-const subredditInput = v.object({
+const collectionInput = v.object({
   legacyId: v.string(),
   name: v.string(),
   slug: v.optional(v.string()),
@@ -45,7 +45,7 @@ const postInput = v.object({
   postContentLegacyId: v.optional(v.string()),
   title: v.string(),
   body: v.optional(v.string()),
-  subredditLegacyId: v.string(),
+  collectionLegacyId: v.string(),
   createdAt: v.optional(v.number()),
   modifiedAt: v.optional(v.number()),
   score: v.optional(v.number()),
@@ -85,8 +85,8 @@ function inferMediaType(imageType: string | undefined, imageUrl: string | undefi
 type Stats = {
   usersCreated: number;
   usersUpdated: number;
-  subredditsCreated: number;
-  subredditsUpdated: number;
+  collectionsCreated: number;
+  collectionsUpdated: number;
   tagsCreated: number;
   tagsUpdated: number;
   postsCreated: number;
@@ -123,7 +123,7 @@ async function findUserByEmail(
 export const importAll = mutation({
   args: {
     users: v.optional(v.array(userInput)),
-    subreddits: v.optional(v.array(subredditInput)),
+    collections: v.optional(v.array(collectionInput)),
     tags: v.optional(v.array(tagInput)),
     posts: v.optional(v.array(postInput)),
     mediaItems: v.optional(v.array(mediaItemInput)),
@@ -132,8 +132,8 @@ export const importAll = mutation({
     const stats: Stats = {
       usersCreated: 0,
       usersUpdated: 0,
-      subredditsCreated: 0,
-      subredditsUpdated: 0,
+      collectionsCreated: 0,
+      collectionsUpdated: 0,
       tagsCreated: 0,
       tagsUpdated: 0,
       postsCreated: 0,
@@ -151,19 +151,19 @@ export const importAll = mutation({
     };
 
     const userIdByEmail = new Map<string, Id<"users">>();
-    const subredditIdByLegacy = new Map<string, Id<"subreddits">>();
+    const collectionIdByLegacy = new Map<string, Id<"collections">>();
     const tagIdByLegacy = new Map<string, Id<"tags">>();
     const postIdByLegacy = new Map<string, Id<"posts">>();
 
-    async function resolveSubreddit(legacyId: string) {
-      const cached = subredditIdByLegacy.get(legacyId);
+    async function resolveCollection(legacyId: string) {
+      const cached = collectionIdByLegacy.get(legacyId);
       if (cached) return cached;
       const existing = await ctx.db
-        .query("subreddits")
+        .query("collections")
         .withIndex("by_legacyId", (q) => q.eq("legacyId", legacyId))
         .unique();
       if (!existing) return null;
-      subredditIdByLegacy.set(legacyId, existing._id);
+      collectionIdByLegacy.set(legacyId, existing._id);
       return existing._id;
     }
 
@@ -251,53 +251,53 @@ export const importAll = mutation({
       }
     }
 
-    for (const subreddit of args.subreddits ?? []) {
-      const slug = subreddit.slug ?? slugify(subreddit.name);
+    for (const collection of args.collections ?? []) {
+      const slug = collection.slug ?? slugify(collection.name);
       const existingByLegacy = await ctx.db
-        .query("subreddits")
-        .withIndex("by_legacyId", (q) => q.eq("legacyId", subreddit.legacyId))
+        .query("collections")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", collection.legacyId))
         .unique();
       const existingBySlug = existingByLegacy
         ? null
         : await ctx.db
-            .query("subreddits")
+            .query("collections")
             .withIndex("by_slug", (q) => q.eq("slug", slug))
             .unique();
       const existing = existingByLegacy ?? existingBySlug;
       const patch = cleanPatch({
-        name: subreddit.name,
+        name: collection.name,
         slug,
-        description: subreddit.description,
-        introduction: subreddit.introduction,
-        conclusion: subreddit.conclusion,
-        bannerImage: subreddit.bannerImage,
-        nsfw: subreddit.nsfw,
-        moderatorEmails: subreddit.moderatorEmails,
-        createdAt: subreddit.createdAt ?? Date.now(),
-        modifiedAt: subreddit.modifiedAt,
-        legacyId: subreddit.legacyId,
+        description: collection.description,
+        introduction: collection.introduction,
+        conclusion: collection.conclusion,
+        bannerImage: collection.bannerImage,
+        nsfw: collection.nsfw,
+        moderatorEmails: collection.moderatorEmails,
+        createdAt: collection.createdAt ?? Date.now(),
+        modifiedAt: collection.modifiedAt,
+        legacyId: collection.legacyId,
       });
 
       if (existing) {
         await ctx.db.patch(existing._id, patch);
-        subredditIdByLegacy.set(subreddit.legacyId, existing._id);
-        stats.subredditsUpdated += 1;
+        collectionIdByLegacy.set(collection.legacyId, existing._id);
+        stats.collectionsUpdated += 1;
       } else {
-        const subredditId = await ctx.db.insert("subreddits", {
-          name: subreddit.name,
+        const collectionId = await ctx.db.insert("collections", {
+          name: collection.name,
           slug,
-          description: subreddit.description,
-          introduction: subreddit.introduction,
-          conclusion: subreddit.conclusion,
-          bannerImage: subreddit.bannerImage,
-          nsfw: subreddit.nsfw,
-          moderatorEmails: subreddit.moderatorEmails,
-          createdAt: subreddit.createdAt ?? Date.now(),
-          modifiedAt: subreddit.modifiedAt,
-          legacyId: subreddit.legacyId,
+          description: collection.description,
+          introduction: collection.introduction,
+          conclusion: collection.conclusion,
+          bannerImage: collection.bannerImage,
+          nsfw: collection.nsfw,
+          moderatorEmails: collection.moderatorEmails,
+          createdAt: collection.createdAt ?? Date.now(),
+          modifiedAt: collection.modifiedAt,
+          legacyId: collection.legacyId,
         });
-        subredditIdByLegacy.set(subreddit.legacyId, subredditId);
-        stats.subredditsCreated += 1;
+        collectionIdByLegacy.set(collection.legacyId, collectionId);
+        stats.collectionsCreated += 1;
       }
     }
 
@@ -340,19 +340,19 @@ export const importAll = mutation({
       const userId = userIdByEmail.get(user.email.toLowerCase());
       if (!userId) continue;
 
-      for (const subredditLegacyId of user.joinedSubredditLegacyIds ?? []) {
-        const subredditId = await resolveSubreddit(subredditLegacyId);
-        if (!subredditId) {
+      for (const collectionLegacyId of user.joinedCollectionLegacyIds ?? []) {
+        const collectionId = await resolveCollection(collectionLegacyId);
+        if (!collectionId) {
           stats.unresolved.push(
-            `membership:${user.email}->${subredditLegacyId}`
+            `membership:${user.email}->${collectionLegacyId}`
           );
           continue;
         }
 
         const existing = await ctx.db
-          .query("subredditMembers")
-          .withIndex("by_user_subreddit", (q) =>
-            q.eq("userId", userId).eq("subredditId", subredditId)
+          .query("collectionMembers")
+          .withIndex("by_user_collection", (q) =>
+            q.eq("userId", userId).eq("collectionId", collectionId)
           )
           .unique();
         if (existing) {
@@ -360,15 +360,15 @@ export const importAll = mutation({
           continue;
         }
 
-        await ctx.db.insert("subredditMembers", { userId, subredditId });
+        await ctx.db.insert("collectionMembers", { userId, collectionId });
         stats.membershipsCreated += 1;
       }
     }
 
     for (const post of args.posts ?? []) {
-      const subredditId = await resolveSubreddit(post.subredditLegacyId);
-      if (!subredditId) {
-        stats.unresolved.push(`post:${post.legacyId}->${post.subredditLegacyId}`);
+      const collectionId = await resolveCollection(post.collectionLegacyId);
+      if (!collectionId) {
+        stats.unresolved.push(`post:${post.legacyId}->${post.collectionLegacyId}`);
         continue;
       }
 
@@ -383,7 +383,7 @@ export const importAll = mutation({
         legacyBody: post.body,
         contentJson: bbcodeToRichText(post.body),
         plainTextExcerpt: excerptFromText(post.body),
-        subredditId,
+        collectionId,
         authorId: undefined,
         createdAt: post.createdAt ?? Date.now(),
         modifiedAt: post.modifiedAt,
@@ -403,7 +403,7 @@ export const importAll = mutation({
             legacyBody: post.body,
             contentJson: bbcodeToRichText(post.body),
             plainTextExcerpt: excerptFromText(post.body),
-            subredditId,
+            collectionId,
             authorId: undefined,
             createdAt: post.createdAt ?? Date.now(),
             modifiedAt: post.modifiedAt,

@@ -53,6 +53,21 @@ type DbContext =
   | Pick<QueryCtx, "db" | "auth" | "storage">
   | Pick<MutationCtx, "db" | "auth" | "storage">;
 
+type CollectionLike = Doc<"collections">;
+
+type LegacyCollectionQuery = {
+  collect: () => Promise<CollectionLike[]>;
+};
+
+type LegacyCollectionDb = {
+  get: (id: string) => Promise<CollectionLike | null>;
+  query: (tableName: "subreddits") => LegacyCollectionQuery;
+};
+
+function legacyCollectionDb(db: unknown) {
+  return db as LegacyCollectionDb;
+}
+
 function emptyReactionCounts(): ReactionCounts {
   return {
     like: 0,
@@ -90,7 +105,7 @@ function defaultAudienceSummary(slug: string): AudienceSummary | null {
 
 async function flavorForCollection(
   ctx: DbContext,
-  collection: Doc<"subreddits"> | null
+  collection: Doc<"collections"> | null
 ): Promise<FlavorSummary> {
   if (collection?.flavorId) {
     const flavor = await ctx.db.get(collection.flavorId);
@@ -112,7 +127,7 @@ async function flavorForCollection(
 
 async function audiencesForCollection(
   ctx: DbContext,
-  collection: Doc<"subreddits"> | null
+  collection: Doc<"collections"> | null
 ): Promise<AudienceSummary[]> {
   if (collection?.audienceIds?.length) {
     const audiences = (
@@ -135,6 +150,61 @@ async function audiencesForCollection(
   return inferred.length > 0
     ? inferred
     : [{ _id: null, name: "Everyone", slug: "everyone" }];
+}
+
+async function collectionForPost(ctx: DbContext, post: Doc<"posts">) {
+  const rawPost = post as Doc<"posts"> & {
+    collectionId?: Id<"collections">;
+    subredditId?: string;
+  };
+
+  if (rawPost.collectionId) {
+    const collection = await ctx.db.get(rawPost.collectionId);
+    if (collection) return collection;
+  }
+
+  if (rawPost.subredditId) {
+    return await legacyCollectionDb(ctx.db).get(rawPost.subredditId);
+  }
+
+  return null;
+}
+
+async function collectionIdFromLegacyId(ctx: MutationCtx, legacyId: unknown) {
+  if (!legacyId || typeof legacyId !== "string") return null;
+  const legacyCollection = await legacyCollectionDb(ctx.db).get(legacyId);
+  if (!legacyCollection) return null;
+
+  const existingByLegacy = legacyCollection.legacyId
+    ? await ctx.db
+        .query("collections")
+        .withIndex("by_legacyId", (q) => q.eq("legacyId", legacyCollection.legacyId))
+        .unique()
+    : null;
+  const existingBySlug = existingByLegacy
+    ? null
+    : await ctx.db
+        .query("collections")
+        .withIndex("by_slug", (q) => q.eq("slug", legacyCollection.slug))
+        .unique();
+  const existing = existingByLegacy ?? existingBySlug;
+  if (existing) return existing._id;
+
+  return await ctx.db.insert("collections", {
+    name: legacyCollection.name,
+    slug: legacyCollection.slug,
+    description: legacyCollection.description,
+    introduction: legacyCollection.introduction,
+    conclusion: legacyCollection.conclusion,
+    bannerImage: legacyCollection.bannerImage,
+    flavorId: legacyCollection.flavorId,
+    audienceIds: legacyCollection.audienceIds,
+    nsfw: legacyCollection.nsfw,
+    moderatorEmails: legacyCollection.moderatorEmails,
+    createdAt: legacyCollection.createdAt ?? Date.now(),
+    modifiedAt: legacyCollection.modifiedAt,
+    legacyId: legacyCollection.legacyId,
+  });
 }
 
 function addReaction(counts: ReactionCounts, kind: ReactionKind) {
@@ -286,7 +356,7 @@ async function enrichPost(
   ctx: DbContext,
   post: Doc<"posts">
 ): Promise<EnrichedPost> {
-  const subreddit = await ctx.db.get(post.subredditId);
+  const collection = await collectionForPost(ctx, post);
   const author = post.authorId ? await ctx.db.get(post.authorId) : null;
   const tagLinks = await ctx.db
     .query("postTags")
@@ -319,8 +389,8 @@ async function enrichPost(
     userId && postReactions.find((reaction) => reaction.userId === userId)?.kind;
   const viewerReaction =
     explicitViewerReaction ?? (viewerVote?.value === 1 ? "like" : null);
-  const flavor = await flavorForCollection(ctx, subreddit);
-  const audiences = await audiencesForCollection(ctx, subreddit);
+  const flavor = await flavorForCollection(ctx, collection);
+  const audiences = await audiencesForCollection(ctx, collection);
 
   const contentJson =
     (post.contentJson as RichTextDocument | undefined) ??
@@ -331,16 +401,10 @@ async function enrichPost(
     title: titleFromContent(post.title, post.body),
     contentJson,
     plainTextExcerpt: post.plainTextExcerpt ?? excerptFromText(post.body),
-    subreddit: subreddit
+    collection: collection
       ? {
-          name: subreddit.name,
-          slug: subreddit.slug,
-        }
-      : null,
-    collection: subreddit
-      ? {
-          name: subreddit.name,
-          slug: subreddit.slug,
+          name: collection.name,
+          slug: collection.slug,
         }
       : null,
     flavor,
@@ -368,6 +432,7 @@ async function enrichPost(
 
 export const list = query({
   args: {
+    collectionSlug: v.optional(v.string()),
     subredditSlug: v.optional(v.string()),
     tagSlug: v.optional(v.string()),
     flavorSlug: v.optional(v.string()),
@@ -379,23 +444,48 @@ export const list = query({
     const limit = args.limit ?? DEFAULT_LIMIT;
     let posts: Array<Doc<"posts">> = [];
 
-    if (args.subredditSlug) {
-      const subreddit = await ctx.db
-        .query("subreddits")
-        .withIndex("by_slug", (q) => q.eq("slug", args.subredditSlug!))
-        .unique();
+    const requestedCollectionSlug = args.collectionSlug ?? args.subredditSlug;
 
-      if (!subreddit) {
+    if (requestedCollectionSlug) {
+      const collection = await ctx.db
+        .query("collections")
+        .withIndex("by_slug", (q) => q.eq("slug", requestedCollectionSlug))
+        .unique();
+      const legacyCollection = collection
+        ? null
+        : (
+            await legacyCollectionDb(ctx.db).query("subreddits").collect()
+          ).find(
+            (legacy: { slug?: string }) => legacy.slug === requestedCollectionSlug
+          ) ?? null;
+
+      if (!collection && !legacyCollection) {
         return [];
       }
 
-      posts = await ctx.db
-        .query("posts")
-        .withIndex("by_subreddit", (q) =>
-          q.eq("subredditId", subreddit._id)
-        )
-        .order("desc")
-        .take(limit);
+      if (collection) {
+        posts = await ctx.db
+          .query("posts")
+          .withIndex("by_collection", (q) =>
+            q.eq("collectionId", collection._id)
+          )
+          .order("desc")
+          .take(limit);
+      } else {
+        const legacyCollectionId = legacyCollection?._id;
+        if (!legacyCollectionId) return [];
+        const recentPosts = await ctx.db
+          .query("posts")
+          .withIndex("by_createdAt", (q) => q)
+          .order("desc")
+          .take(1000);
+        posts = recentPosts
+          .filter((post) => {
+            const rawPost = post as Doc<"posts"> & { subredditId?: string };
+            return rawPost.subredditId === legacyCollectionId;
+          })
+          .slice(0, limit);
+      }
     } else if (args.tagSlug) {
       const tag = await ctx.db
         .query("tags")
@@ -429,7 +519,7 @@ export const list = query({
     if (args.flavorSlug || args.audienceSlug) {
       const filtered: Array<Doc<"posts">> = [];
       for (const post of posts) {
-        const collection = await ctx.db.get(post.subredditId);
+        const collection = await collectionForPost(ctx, post);
         const flavor = await flavorForCollection(ctx, collection);
         const audiences = await audiencesForCollection(ctx, collection);
         const flavorMatches =
@@ -482,7 +572,8 @@ export const create = mutation({
     body: v.optional(v.string()),
     contentJson: v.optional(v.any()),
     plainTextExcerpt: v.optional(v.string()),
-    subredditId: v.id("subreddits"),
+    collectionId: v.optional(v.id("collections")),
+    subredditId: v.optional(v.any()),
     tagNames: v.optional(v.array(v.string())),
     mediaAttachments: v.optional(v.array(mediaAttachmentInput)),
   },
@@ -492,8 +583,14 @@ export const create = mutation({
       throw new Error("You must be signed in to post.");
     }
 
-    const subreddit = await ctx.db.get(args.subredditId);
-    if (!subreddit) {
+    const collectionId =
+      args.collectionId ?? (await collectionIdFromLegacyId(ctx, args.subredditId));
+    if (!collectionId) {
+      throw new Error("Collection not found.");
+    }
+
+    const collection = await ctx.db.get(collectionId);
+    if (!collection) {
       throw new Error("Collection not found.");
     }
 
@@ -515,7 +612,7 @@ export const create = mutation({
       body,
       contentJson,
       plainTextExcerpt,
-      subredditId: args.subredditId,
+      collectionId,
       authorId: user._id,
       createdAt: Date.now(),
       score: 0,

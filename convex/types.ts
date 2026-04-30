@@ -5,7 +5,7 @@ export type AuthorSummary = {
   imageUrl: string | null;
 } | null;
 
-export type SubredditSummary = Pick<Doc<"subreddits">, "name" | "slug"> | null;
+export type CollectionSummary = Pick<Doc<"collections">, "name" | "slug"> | null;
 
 export type TagSummary = Pick<Doc<"tags">, "name" | "slug">;
 
@@ -77,8 +77,7 @@ export type AiGenerationStatus =
   | "failed";
 
 export type EnrichedPost = Doc<"posts"> & {
-  subreddit: SubredditSummary;
-  collection: SubredditSummary;
+  collection: CollectionSummary;
   flavor: FlavorSummary;
   audiences: AudienceSummary[];
   author: AuthorSummary;
