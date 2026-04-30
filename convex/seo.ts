@@ -45,8 +45,33 @@ type PostWithLegacyCollection = Doc<"posts"> & {
   subredditId?: string;
 };
 
+type SeoMediaType = "image" | "video" | "audio" | "model3d" | "game" | "unknown";
+
 function legacyCollectionDb(db: unknown) {
   return db as LegacyCollectionDb;
+}
+
+function normalizeAssetUrl(value: string | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return trimmed;
+}
+
+function inferLegacyMediaType(item: Doc<"mediaItems">): SeoMediaType {
+  const mime = item.imageType?.toLowerCase() ?? "";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.includes("model") || mime.includes("obj") || mime.includes("gltf")) {
+    return "model3d";
+  }
+  if (mime.includes("html")) return "game";
+  if (item.mediaType) return item.mediaType;
+  if (item.imageUrl || item.imageFile) return "image";
+  return "unknown";
 }
 
 function normalizeWhitespace(value: string | null | undefined) {
@@ -310,19 +335,29 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     .collect();
   const media = [];
 
-  for (const item of mediaItems.slice(0, 3)) {
+  const rankedMediaItems = [...mediaItems].sort((a, b) => {
+    const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (a.order ?? a.marker ?? 0) - (b.order ?? b.marker ?? 0);
+  });
+
+  for (const item of rankedMediaItems) {
     const storageUrl = item.storageId
       ? await ctx.storage.getUrl(item.storageId)
       : null;
-    const url = storageUrl ?? item.imageUrl ?? item.imageFile ?? null;
+    const url =
+      storageUrl ??
+      normalizeAssetUrl(item.imageUrl) ??
+      normalizeAssetUrl(item.imageFile);
     if (!url) continue;
     media.push({
       url,
-      mediaType: item.mediaType ?? "unknown",
+      mediaType: item.mediaType ?? inferLegacyMediaType(item),
       altText: item.altText ?? item.imageName ?? item.filename ?? post.title,
       duration: item.duration ?? null,
       filename: item.filename ?? item.imageName ?? null,
     });
+    if (media.length >= 3) break;
   }
 
   const title = titleFromContent(post.title, post.body ?? post.legacyBody);
