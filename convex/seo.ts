@@ -74,6 +74,31 @@ function inferLegacyMediaType(item: Doc<"mediaItems">): SeoMediaType {
   return "unknown";
 }
 
+function normalizeMediaIdentity(value: string | null | undefined) {
+  const normalized = normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/\s*\(\d+\)\s*$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+\d+$/i, "")
+    .trim();
+  return normalized || null;
+}
+
+function mediaIdentity(item: Doc<"mediaItems">) {
+  const candidates = [
+    item.filename,
+    item.imageName,
+    item.altText,
+    item.importMatchText,
+  ];
+  for (const candidate of candidates) {
+    const identity = normalizeMediaIdentity(candidate);
+    if (identity) return `${inferLegacyMediaType(item)}:${identity}`;
+  }
+  return null;
+}
+
 function normalizeWhitespace(value: string | null | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -341,7 +366,17 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     return (a.order ?? a.marker ?? 0) - (b.order ?? b.marker ?? 0);
   });
 
+  const hasLegacyUrlMedia = mediaItems.some(
+    (item) =>
+      item.source !== "zip-import" &&
+      (item.storageId ||
+        normalizeAssetUrl(item.imageUrl) ||
+        normalizeAssetUrl(item.imageFile))
+  );
+  const seenMedia = new Set<string>();
+
   for (const item of rankedMediaItems) {
+    if (hasLegacyUrlMedia && item.source === "zip-import") continue;
     const storageUrl = item.storageId
       ? await ctx.storage.getUrl(item.storageId)
       : null;
@@ -350,6 +385,9 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
       normalizeAssetUrl(item.imageUrl) ??
       normalizeAssetUrl(item.imageFile);
     if (!url) continue;
+    const identity = mediaIdentity(item);
+    if (identity && seenMedia.has(identity)) continue;
+    if (identity) seenMedia.add(identity);
     media.push({
       url,
       mediaType: item.mediaType ?? inferLegacyMediaType(item),
