@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Newsreader, Space_Grotesk } from "next/font/google";
 import { ConvexClientProvider } from "./ConvexClientProvider";
@@ -16,13 +17,13 @@ const newsreader = Newsreader({
 
 export const metadata: Metadata = {
   title: "Witty Cafe",
-  description: "A cozy publishing home for sharp takes and warm communities.",
+  description: "A cafe for wording ideas, modern media concepts, collections, vibes, and flavours.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <ClerkProvider>

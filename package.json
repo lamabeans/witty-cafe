@@ -12,6 +12,8 @@
     "import:bubble:dev": "node scripts/importBubbleCsv.mjs --dev",
     "import:bubble": "node scripts/importBubbleCsv.mjs --live --import",
     "migrate:rich-text": "node scripts/migrateRichText.mjs",
+    "migrate:redesign:dry-run": "node scripts/applyRedesignMigrations.mjs --dry-run",
+    "migrate:redesign": "node scripts/applyRedesignMigrations.mjs --apply --seed-reactions",
     "import:post-images:dry-run": "node scripts/importPostImages.mjs --dry-run",
     "import:post-images": "node scripts/importPostImages.mjs --import"
   },

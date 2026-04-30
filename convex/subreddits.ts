@@ -27,7 +27,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await getOrCreateUser(ctx);
     if (!user) {
-      throw new Error("You must be signed in to create a community.");
+      throw new Error("You must be signed in to create a Collection.");
     }
 
     const slug = slugify(args.name);

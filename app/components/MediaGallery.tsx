@@ -28,6 +28,7 @@ export function MediaGallery({ items = [], compact = false }: MediaGalleryProps)
         const isImage = item.mediaType === "image" || item.mediaType === "unknown";
         const isVideo = item.mediaType === "video";
         const isAudio = item.mediaType === "audio";
+        const isArtifact = item.mediaType === "model3d" || item.mediaType === "game";
         const sharedClass = compact
           ? "h-44 w-full bg-slate-100 object-cover"
           : "max-h-[620px] w-full rounded-lg border border-slate-200 bg-slate-100 object-contain";
@@ -40,6 +41,16 @@ export function MediaGallery({ items = [], compact = false }: MediaGalleryProps)
             {isImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={url} alt={labelFor(item)} className={sharedClass} />
+            ) : null}
+            {isArtifact ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="grid h-32 place-items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-center text-sm font-semibold text-slate-700"
+              >
+                {item.mediaType === "model3d" ? "Open 3D model" : "Play video game"}
+              </a>
             ) : null}
             {isVideo ? (
               <video src={url} controls className={sharedClass} />

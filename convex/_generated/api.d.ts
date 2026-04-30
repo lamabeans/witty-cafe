@@ -8,15 +8,20 @@
  * @module
  */
 
+import type * as audiences from "../audiences.js";
 import type * as comments from "../comments.js";
+import type * as flavors from "../flavors.js";
 import type * as importer from "../importer.js";
 import type * as lib_getOrCreateUser from "../lib/getOrCreateUser.js";
 import type * as lib_richText from "../lib/richText.js";
 import type * as lib_slugify from "../lib/slugify.js";
+import type * as lib_taxonomy from "../lib/taxonomy.js";
 import type * as media from "../media.js";
+import type * as mediaGeneration from "../mediaGeneration.js";
 import type * as migrations from "../migrations.js";
 import type * as posts from "../posts.js";
 import type * as rag from "../rag.js";
+import type * as reactions from "../reactions.js";
 import type * as subreddits from "../subreddits.js";
 import type * as tags from "../tags.js";
 import type * as tasks from "../tasks.js";
@@ -31,15 +36,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  audiences: typeof audiences;
   comments: typeof comments;
+  flavors: typeof flavors;
   importer: typeof importer;
   "lib/getOrCreateUser": typeof lib_getOrCreateUser;
   "lib/richText": typeof lib_richText;
   "lib/slugify": typeof lib_slugify;
+  "lib/taxonomy": typeof lib_taxonomy;
   media: typeof media;
+  mediaGeneration: typeof mediaGeneration;
   migrations: typeof migrations;
   posts: typeof posts;
   rag: typeof rag;
+  reactions: typeof reactions;
   subreddits: typeof subreddits;
   tags: typeof tags;
   tasks: typeof tasks;

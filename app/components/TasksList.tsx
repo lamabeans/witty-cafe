@@ -2,9 +2,10 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Doc } from "../../convex/_generated/dataModel";
 
 export default function TasksList() {
-  const tasks = useQuery(api.tasks.get);
+  const tasks = useQuery(api.tasks.get) as Doc<"tasks">[] | undefined;
 
   if (!tasks) {
     return (

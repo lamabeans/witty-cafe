@@ -12,6 +12,8 @@ const mediaTypeValidator = v.union(
   v.literal("image"),
   v.literal("video"),
   v.literal("audio"),
+  v.literal("model3d"),
+  v.literal("game"),
   v.literal("unknown")
 );
 
