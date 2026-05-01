@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
+import { AiCreateCta } from "../components/AiCreationStudio";
 import { absoluteUrl } from "../lib/site";
 
 type CollectionSummary = {
@@ -78,6 +79,8 @@ export default async function CollectionsPage() {
             Feed
           </Link>
         </header>
+
+        <AiCreateCta />
 
         <section className="grid gap-4 md:grid-cols-2">
           {indexableCollections.map((collection) => (

@@ -293,9 +293,8 @@ async function collectionBySlug(ctx: Pick<MutationCtx, "db">, name: string) {
 
 export const viewer = query({
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    const email = identity?.email?.toLowerCase();
-    const isAdmin = Boolean(email && adminEmails().has(email));
+    const email = await currentAdminEmail(ctx);
+    const isAdmin = Boolean(email);
     const kimi = providerConfig("kimi");
     const zai = providerConfig("zai");
     return {
@@ -315,15 +314,40 @@ export const viewer = query({
 });
 
 export const campaigns = query({
-  args: { limit: v.optional(v.number()) },
+  args: {
+    limit: v.optional(v.number()),
+    collectionId: v.optional(v.id("collections")),
+  },
   handler: async (ctx, args) => {
     const user = await currentAdminQueryUser(ctx);
     if (!user) return [];
-    return await ctx.db
-      .query("aiContentCampaigns")
-      .withIndex("by_requester", (q) => q.eq("requesterId", user._id))
-      .order("desc")
-      .take(args.limit ?? 12);
+    const limit = Math.max(1, Math.min(50, args.limit ?? 12));
+    const campaigns = args.collectionId
+      ? await ctx.db
+          .query("aiContentCampaigns")
+          .withIndex("by_requester_collection", (q) =>
+            q.eq("requesterId", user._id).eq("collectionId", args.collectionId)
+          )
+          .order("desc")
+          .take(limit)
+      : await ctx.db
+          .query("aiContentCampaigns")
+          .withIndex("by_requester", (q) => q.eq("requesterId", user._id))
+          .order("desc")
+          .take(limit);
+
+    return await Promise.all(
+      campaigns.map(async (campaign) => {
+        const collection = campaign.collectionId
+          ? await ctx.db.get(campaign.collectionId)
+          : null;
+        return {
+          ...campaign,
+          collectionName: campaign.collectionName ?? collection?.name,
+          collectionSlug: collection?.slug ?? null,
+        };
+      })
+    );
   },
 });
 
@@ -349,6 +373,9 @@ export const startCampaign = internalMutation({
     const existingCollection = args.collectionId
       ? await ctx.db.get(args.collectionId)
       : null;
+    if (args.collectionId && !existingCollection) {
+      throw new Error("Collection not found.");
+    }
     const count = targetIdeaCount(args.targetIdeaCount);
     const config = providerConfig(args.provider);
     const prompt = userPrompt({

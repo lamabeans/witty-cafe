@@ -296,6 +296,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_requester", ["requesterId"])
+    .index("by_requester_collection", ["requesterId", "collectionId"])
     .index("by_status", ["status"]),
 }, {
   schemaValidation: false,

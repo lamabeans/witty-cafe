@@ -5,6 +5,7 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { absoluteUrl, cleanMediaAltText, stripBbCode, truncateText } from "../../lib/site";
+import { AiCreationStudio } from "../../components/AiCreationStudio";
 import { imageUrlsFor, mediaObjectsFor } from "../../lib/structuredData";
 import {
   CollectionIdeaActions,
@@ -389,6 +390,18 @@ export default async function CollectionPage({
             </div>
           ) : null}
         </header>
+
+        <div className="mt-6">
+          <AiCreationStudio
+            mode="fixedCollection"
+            collection={{
+              _id: collection._id,
+              name: collection.name,
+              slug: collection.slug,
+            }}
+            hideIfUnauthorized
+          />
+        </div>
 
         <section className="mt-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

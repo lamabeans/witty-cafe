@@ -155,7 +155,7 @@ function dailyLimitFor(user: Doc<"users">) {
 
 function openAiModelFor(mediaType: GenerationMediaType) {
   if (mediaType === "image") {
-    return envString("AI_IMAGE_MODEL", "gpt-image-2");
+    return envString("AI_IMAGE_MODEL", "gpt-image-1.5");
   }
   if (mediaType === "audio") {
     return envString("AI_AUDIO_MODEL", "gpt-4o-mini-tts");
