@@ -124,6 +124,13 @@ type ViewerGenerationStatus = {
   quotaLimit: number;
   quotaUsed: number;
   quotaRemaining: number;
+  providers: Record<
+    GenerationProvider,
+    {
+      configured: boolean;
+      missing: string[];
+    }
+  >;
   jobs: Array<{
     _id: Id<"mediaGenerations">;
     mediaType: GenerationMediaType;
@@ -139,8 +146,12 @@ type ViewerGenerationStatus = {
   }>;
 };
 
+function envSecret(name: string) {
+  return process.env[name]?.trim() || undefined;
+}
+
 function envString(name: string, fallback: string) {
-  const value = process.env[name]?.trim();
+  const value = envSecret(name);
   return value || fallback;
 }
 
@@ -242,17 +253,40 @@ function missingProviderEnv(
   mediaType: GenerationMediaType
 ) {
   assertProviderSupports(provider, mediaType);
-  const names =
+  const groups =
     provider === "openai"
-      ? ["OPENAI_API_KEY"]
+      ? [["OPENAI_API_KEY"]]
       : provider === "gemini"
-        ? ["GEMINI_API_KEY"]
+        ? [["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"]]
         : provider === "elevenlabs"
-          ? ["ELEVENLABS_API_KEY"]
+          ? [["ELEVENLABS_API_KEY"]]
           : provider === "kimi"
-            ? ["MOONSHOT_API_KEY", "OPENAI_API_KEY"]
-            : ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
-  return names.filter((name) => !process.env[name]?.trim());
+            ? [["MOONSHOT_API_KEY"], ["OPENAI_API_KEY"]]
+            : [["ANTHROPIC_API_KEY"], ["OPENAI_API_KEY"]];
+
+  return groups
+    .filter((names) => names.every((name) => !envSecret(name)))
+    .map((names) => names.join(" or "));
+}
+
+function providerReadiness() {
+  const providers: GenerationProvider[] = [
+    "openai",
+    "gemini",
+    "elevenlabs",
+    "kimi",
+    "anthropic",
+  ];
+
+  return Object.fromEntries(
+    providers.map((provider) => {
+      const missing = missingProviderEnv(
+        provider,
+        provider === "elevenlabs" ? "audio" : "image"
+      );
+      return [provider, { configured: missing.length === 0, missing }];
+    })
+  ) as ViewerGenerationStatus["providers"];
 }
 
 function adminEmails() {
@@ -898,12 +932,12 @@ async function enhancePromptWithAnthropic(
 
 async function maybeEnhancePrompt(generation: StartedGeneration) {
   if (generation.provider === "kimi") {
-    const apiKey = process.env.MOONSHOT_API_KEY;
+    const apiKey = envSecret("MOONSHOT_API_KEY");
     if (!apiKey) throw new Error("MOONSHOT_API_KEY is not configured in Convex.");
     return enhancePromptWithKimi(apiKey, generation.mediaType, generation.prompt);
   }
   if (generation.provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = envSecret("ANTHROPIC_API_KEY");
     if (!apiKey) {
       throw new Error("ANTHROPIC_API_KEY is not configured in Convex.");
     }
@@ -913,9 +947,11 @@ async function maybeEnhancePrompt(generation: StartedGeneration) {
 }
 
 function apiKeyForOutputProvider(provider: OutputProvider) {
-  if (provider === "gemini") return process.env.GEMINI_API_KEY;
-  if (provider === "elevenlabs") return process.env.ELEVENLABS_API_KEY;
-  return process.env.OPENAI_API_KEY;
+  if (provider === "gemini") {
+    return envSecret("GEMINI_API_KEY") ?? envSecret("GOOGLE_GENERATIVE_AI_API_KEY");
+  }
+  if (provider === "elevenlabs") return envSecret("ELEVENLABS_API_KEY");
+  return envSecret("OPENAI_API_KEY");
 }
 
 async function generateImageWithProvider(
@@ -974,6 +1010,7 @@ export const viewerStatus = query({
     const post = await ctx.db.get(args.postId);
     const now = Date.now();
     const today = dayKey(now);
+    const providers = providerReadiness();
 
     if (!post) {
       return {
@@ -982,6 +1019,7 @@ export const viewerStatus = query({
         quotaLimit: DEFAULT_DAILY_LIMIT,
         quotaUsed: 0,
         quotaRemaining: 0,
+        providers,
         jobs: [],
       };
     }
@@ -993,6 +1031,7 @@ export const viewerStatus = query({
         quotaLimit: DEFAULT_DAILY_LIMIT,
         quotaUsed: 0,
         quotaRemaining: 0,
+        providers,
         jobs: [],
       };
     }
@@ -1044,6 +1083,7 @@ export const viewerStatus = query({
       quotaLimit,
       quotaUsed,
       quotaRemaining: Math.max(0, quotaLimit - quotaUsed),
+      providers,
       jobs: jobs.map((job) => ({
         _id: job._id,
         mediaType: job.mediaType,

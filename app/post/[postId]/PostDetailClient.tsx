@@ -51,6 +51,13 @@ type GenerationViewerStatus = {
   quotaLimit: number;
   quotaUsed: number;
   quotaRemaining: number;
+  providers: Record<
+    GenerationProvider,
+    {
+      configured: boolean;
+      missing: string[];
+    }
+  >;
   jobs: GenerationJob[];
 };
 
@@ -223,12 +230,37 @@ function AiMediaPanel({
   const [generationError, setGenerationError] = useState<string | null>(null);
   const activePreset = presetByType[mediaType];
   const activeProvider = providerByType[mediaType];
+  const activeProviderStatus = status?.providers[activeProvider];
+  const activeProviderMissing = activeProviderStatus?.missing ?? [];
+  const activeProviderConfigured = Boolean(activeProviderStatus?.configured);
   const disabled =
-    !canWrite || !status?.canGenerate || isGenerating || status === undefined;
+    !canWrite ||
+    !status?.canGenerate ||
+    !activeProviderConfigured ||
+    isGenerating ||
+    status === undefined;
   const reason = authPending
     ? "Finishing sign-in."
     : status?.reason ??
+      (!activeProviderConfigured && status
+        ? `${PROVIDER_LABELS[activeProvider]} needs Convex env ${
+            activeProviderMissing.join(", ") || "configuration"
+          }.`
+        : null) ??
       (!canWrite ? "Sign in to generate AI media." : null);
+
+  useEffect(() => {
+    if (!status) return;
+    if (status.providers[activeProvider]?.configured) return;
+    const fallback = GENERATION_PROVIDERS[mediaType].find(
+      (provider) => status.providers[provider.value]?.configured
+    );
+    if (!fallback) return;
+    setProviderByType((current) => ({
+      ...current,
+      [mediaType]: fallback.value,
+    }));
+  }, [activeProvider, mediaType, status]);
 
   const handleGenerate = async () => {
     setGenerationError(null);
@@ -293,8 +325,15 @@ function AiMediaPanel({
         className="wc-input mt-3 h-10 w-full text-sm font-bold"
       >
         {GENERATION_PROVIDERS[mediaType].map((provider) => (
-          <option key={provider.value} value={provider.value}>
+          <option
+            key={provider.value}
+            value={provider.value}
+            disabled={status ? !status.providers[provider.value]?.configured : false}
+          >
             {provider.label} - {provider.description}
+            {status && !status.providers[provider.value]?.configured
+              ? " (needs API key)"
+              : ""}
           </option>
         ))}
       </select>
