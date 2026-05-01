@@ -4,6 +4,26 @@ import { absoluteUrl } from "../lib/site";
 
 export const dynamic = "force-dynamic";
 
+type SitemapMedia = {
+  url: string;
+  mediaType: string;
+  altText: string | null;
+};
+type SitemapEntries = {
+  collections: Array<{
+    slug: string;
+    lastModified: number;
+    postCount: number;
+    indexable: boolean;
+    media: SitemapMedia[];
+  }>;
+  posts: Array<{
+    _id: string;
+    lastModified: number;
+    media: SitemapMedia[];
+  }>;
+};
+
 function escapeXml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -55,7 +75,7 @@ ${imageTags(media)}
 }
 
 export async function GET() {
-  const entries = await fetchQuery(api.seo.sitemapEntries, {});
+  const entries = (await fetchQuery(api.seo.sitemapEntries, {})) as SitemapEntries;
   const now = new Date();
   const urls = [
     urlEntry({

@@ -273,6 +273,30 @@ export default defineSchema({
     .index("by_requester_day", ["requesterId", "dayKey"])
     .index("by_status", ["status"])
     .index("by_openAiJobId", ["openAiJobId"]),
+  aiContentCampaigns: defineTable({
+    requesterId: v.id("users"),
+    provider: v.union(v.literal("kimi"), v.literal("zai")),
+    model: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    keywords: v.array(v.string()),
+    targetIdeaCount: v.number(),
+    collectionId: v.optional(v.id("collections")),
+    collectionName: v.optional(v.string()),
+    prompt: v.string(),
+    keywordResearch: v.optional(v.any()),
+    createdPostIds: v.optional(v.array(v.id("posts"))),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    modifiedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_requester", ["requesterId"])
+    .index("by_status", ["status"]),
 }, {
   schemaValidation: false,
   strictTableNameTypes: false,

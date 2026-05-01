@@ -1,5 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { AiContentStudio } from "./AiContentStudio";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -16,17 +17,20 @@ export default async function DashboardPage() {
     "there";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-6 text-zinc-900">
-      <main className="w-full max-w-2xl rounded-3xl border border-zinc-200 bg-white p-10 shadow-lg">
-        <p className="text-sm font-medium uppercase tracking-widest text-zinc-500">
-          Dashboard
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold leading-tight">
-          Welcome, {name}
-        </h1>
-        <p className="mt-4 text-lg text-zinc-600">
-          You are signed in and can see this protected page.
-        </p>
+    <div className="min-h-screen bg-[var(--canvas)] px-4 py-6 text-[var(--ink)]">
+      <main className="mx-auto grid w-full max-w-[1040px] gap-6">
+        <section className="wc-card p-6">
+          <p className="text-sm font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+            Dashboard
+          </p>
+          <h1 className="font-display mt-2 text-4xl font-black leading-tight">
+            Welcome, {name}
+          </h1>
+          <p className="mt-4 text-base font-bold text-[var(--muted)]">
+            Manage publishing tools and background AI content generation.
+          </p>
+        </section>
+        <AiContentStudio />
       </main>
     </div>
   );

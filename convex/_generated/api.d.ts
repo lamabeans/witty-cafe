@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiContent from "../aiContent.js";
 import type * as audiences from "../audiences.js";
 import type * as collections from "../collections.js";
 import type * as comments from "../comments.js";
@@ -38,6 +39,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiContent: typeof aiContent;
   audiences: typeof audiences;
   collections: typeof collections;
   comments: typeof comments;

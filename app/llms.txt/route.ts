@@ -2,8 +2,18 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
 import { absoluteUrl } from "../lib/site";
 
+type CollectionSummary = {
+  name: string;
+  slug: string;
+  description: string;
+  indexable: boolean;
+};
+
 export async function GET() {
-  const collections = await fetchQuery(api.seo.collectionSummaries, {});
+  const collections = (await fetchQuery(
+    api.seo.collectionSummaries,
+    {}
+  )) as CollectionSummary[];
   const topCollections = collections
     .filter((collection) => collection.indexable)
     .slice(0, 20);

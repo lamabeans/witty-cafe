@@ -4,6 +4,18 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
 import { absoluteUrl } from "../lib/site";
 
+type CollectionSummary = {
+  name: string;
+  slug: string;
+  description: string;
+  postCount: number;
+  indexable: boolean;
+  flavor: {
+    name: string;
+    color?: string;
+  };
+};
+
 export const metadata: Metadata = {
   title: "Collections",
   description:
@@ -18,7 +30,10 @@ function formatCount(value: number) {
 }
 
 export default async function CollectionsPage() {
-  const collections = await fetchQuery(api.seo.collectionSummaries, {});
+  const collections = (await fetchQuery(
+    api.seo.collectionSummaries,
+    {}
+  )) as CollectionSummary[];
   const indexableCollections = collections.filter((collection) => collection.indexable);
   const otherCollections = collections.filter((collection) => !collection.indexable);
 

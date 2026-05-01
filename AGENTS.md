@@ -89,3 +89,17 @@ If the live site does not match the pushed code, inspect the latest Vercel deplo
 - Default Gemini models are `gemini-3.1-flash-image-preview`, `gemini-3.1-flash-tts-preview`, and `veo-3.1-generate-preview`.
 - Default Kimi prompt model is `kimi-k2.6`; default Anthropic prompt model is `claude-sonnet-4-20250514`; default ElevenLabs TTS model is `eleven_multilingual_v2`.
 - Generated media is stored in Convex Storage and attached as `mediaItems.source = "ai-generated"`.
+
+## AI Content Generation Notes
+
+- AI text/content generation runs only from Convex actions; never expose provider keys to the browser.
+- Admins are controlled by the comma-separated Convex env var `AI_GENERATION_ADMIN_EMAILS`.
+- The dashboard AI Content Studio can generate a new Collection or add ideas to an existing Collection.
+- Campaigns are stored in `aiContentCampaigns`, then publish generated `collections`, `posts`, and `postTags`.
+- Provider key Convex env vars:
+  - Kimi/Moonshot: `MOONSHOT_API_KEY`, optional `MOONSHOT_BASE_URL`, optional `AI_KIMI_TEXT_MODEL` defaulting to `kimi-k2.6`.
+  - Z.ai: `ZAI_API_KEY`, optional `ZAI_BASE_URL`, optional `AI_ZAI_TEXT_MODEL` defaulting to `glm-5.1`.
+- Background cron:
+  - Vercel calls `/api/cron/ai-content` from `vercel.json`.
+  - Set the same secret in Vercel and Convex as `AI_CONTENT_CRON_SECRET` or `CRON_SECRET`.
+  - The route uses `NEXT_PUBLIC_CONVEX_URL` to schedule queued Convex campaigns.

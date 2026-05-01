@@ -17,6 +17,52 @@ type CollectionPageProps = {
 };
 
 type CollectionSort = "popular" | "new" | "discussed";
+type CollectionPageMedia = {
+  _id?: Id<"mediaItems">;
+  url: string | null;
+  mediaType: "image" | "video" | "audio" | "model3d" | "game" | "unknown";
+  altText?: string | null;
+  duration?: number | null;
+  filename?: string | null;
+  loveCount?: number | null;
+};
+type CollectionPageIdea = {
+  _id: Id<"posts">;
+  title: string;
+  href: string;
+  excerpt: string;
+  createdAt: number;
+  modifiedAt: number | null;
+  score: number;
+  commentCount: number;
+  reactionTotal: number;
+  rankScore: number;
+  vibes: Array<{ name: string; slug: string }>;
+  media: CollectionPageMedia[];
+};
+type CollectionPageSummary = {
+  _id: Id<"collections">;
+  name: string;
+  slug: string;
+  description: string;
+  introduction: string | null;
+  conclusion: string | null;
+  bannerImage: string | null;
+  nsfw: boolean;
+  createdAt: number;
+  modifiedAt: number | null;
+  postCount: number;
+  lastModified: number;
+  indexable: boolean;
+  flavor: { name: string; slug: string; description?: string; color?: string };
+  audiences: Array<{ name: string; slug: string }>;
+};
+type CollectionPageData = {
+  collection: CollectionPageSummary;
+  ideas: CollectionPageIdea[];
+  relatedCollections: CollectionPageSummary[];
+  sort: CollectionSort;
+};
 
 const SORT_OPTIONS: Array<{ value: CollectionSort; label: string }> = [
   { value: "popular", label: "Popular" },
@@ -137,7 +183,10 @@ export async function generateMetadata({
   params,
 }: CollectionPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const data = await fetchQuery(api.seo.collectionPage, { slug, limit: 12 });
+  const data = (await fetchQuery(api.seo.collectionPage, {
+    slug,
+    limit: 12,
+  })) as CollectionPageData | null;
 
   if (!data) {
     return {
@@ -186,7 +235,10 @@ export default async function CollectionPage({
   const { slug } = await params;
   const { sort: sortParam } = (await searchParams) ?? {};
   const sort = normalizeSort(sortParam);
-  const data = await fetchQuery(api.seo.collectionPage, { slug, sort });
+  const data = (await fetchQuery(api.seo.collectionPage, {
+    slug,
+    sort,
+  })) as CollectionPageData | null;
 
   if (!data) notFound();
 
