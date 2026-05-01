@@ -1,6 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import {
   DEFAULT_AUDIENCES,
@@ -177,6 +177,45 @@ function sortIdeas<
   });
 }
 
+async function tagSummariesForPosts(ctx: SeoCtx, posts: Array<Doc<"posts">>) {
+  const counts = new Map<
+    Id<"tags">,
+    { name: string; slug: string; count: number }
+  >();
+  const taggedPostIdsBySlug = new Map<string, Set<Id<"posts">>>();
+
+  for (const post of posts) {
+    const tagLinks = await ctx.db
+      .query("postTags")
+      .withIndex("by_post", (q) => q.eq("postId", post._id))
+      .collect();
+    const tags = (
+      await Promise.all(tagLinks.map((link) => ctx.db.get(link.tagId)))
+    ).filter((tag): tag is Doc<"tags"> => tag !== null);
+
+    for (const tag of tags) {
+      const existing = counts.get(tag._id);
+      counts.set(tag._id, {
+        name: tag.name,
+        slug: tag.slug,
+        count: (existing?.count ?? 0) + 1,
+      });
+
+      const taggedPostIds = taggedPostIdsBySlug.get(tag.slug) ?? new Set();
+      taggedPostIds.add(post._id);
+      taggedPostIdsBySlug.set(tag.slug, taggedPostIds);
+    }
+  }
+
+  return {
+    availableTags: [...counts.values()].sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.name.localeCompare(b.name);
+    }),
+    taggedPostIdsBySlug,
+  };
+}
+
 function defaultFlavor(slug: string) {
   const flavor =
     DEFAULT_FLAVORS.find((item) => item.slug === slug) ??
@@ -346,7 +385,6 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     .query("postReactions")
     .withIndex("by_post", (q) => q.eq("postId", post._id))
     .collect();
-  const reactionTotal = reactions.length;
   const tagLinks = await ctx.db
     .query("postTags")
     .withIndex("by_post", (q) => q.eq("postId", post._id))
@@ -359,6 +397,20 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     .withIndex("by_post", (q) => q.eq("postId", post._id))
     .collect();
   const media = [];
+  const mediaReactionsById = new Map<
+    Id<"mediaItems">,
+    Array<Doc<"mediaReactions">>
+  >();
+  let mediaReactionTotal = 0;
+
+  for (const item of mediaItems) {
+    const mediaReactions = await ctx.db
+      .query("mediaReactions")
+      .withIndex("by_media", (q) => q.eq("mediaItemId", item._id))
+      .collect();
+    mediaReactionsById.set(item._id, mediaReactions);
+    mediaReactionTotal += mediaReactions.length;
+  }
 
   const rankedMediaItems = [...mediaItems].sort((a, b) => {
     const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
@@ -388,10 +440,7 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     const identity = mediaIdentity(item);
     if (identity && seenMedia.has(identity)) continue;
     if (identity) seenMedia.add(identity);
-    const mediaReactions = await ctx.db
-      .query("mediaReactions")
-      .withIndex("by_media", (q) => q.eq("mediaItemId", item._id))
-      .collect();
+    const mediaReactions = mediaReactionsById.get(item._id) ?? [];
     media.push({
       _id: item._id,
       url,
@@ -403,6 +452,8 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     });
     if (media.length >= 3) break;
   }
+
+  const reactionTotal = reactions.length + mediaReactionTotal;
 
   const title = titleFromContent(post.title, post.body ?? post.legacyBody);
   const excerpt =
@@ -458,6 +509,7 @@ export const collectionPage = query({
     slug: v.string(),
     limit: v.optional(v.number()),
     sort: v.optional(sortValidator),
+    tagSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const sort = args.sort ?? "popular";
@@ -476,6 +528,16 @@ export const collectionPage = query({
     if (!activeCollection) return null;
 
     const posts = await postsForCollection(ctx, activeCollection);
+    const { availableTags, taggedPostIdsBySlug } = await tagSummariesForPosts(
+      ctx,
+      posts
+    );
+    const activeTaggedPostIds = args.tagSlug
+      ? taggedPostIdsBySlug.get(args.tagSlug)
+      : null;
+    const filteredPosts = args.tagSlug
+      ? posts.filter((post) => activeTaggedPostIds?.has(post._id))
+      : posts;
     const summary = await summarizeCollection(
       ctx,
       activeCollection,
@@ -483,7 +545,7 @@ export const collectionPage = query({
     );
     const ideas = [];
     const ideaLimit = args.limit ?? DEFAULT_IDEA_LIMIT;
-    const topPosts = sortPosts(posts, sort).slice(0, ideaLimit);
+    const topPosts = sortPosts(filteredPosts, sort).slice(0, ideaLimit);
 
     for (const post of topPosts) {
       ideas.push(await ideaSummary(ctx, post));
@@ -512,6 +574,8 @@ export const collectionPage = query({
     return {
       collection: summary,
       ideas: sortIdeas(ideas, sort).slice(0, args.limit ?? DEFAULT_IDEA_LIMIT),
+      availableTags,
+      activeTagSlug: args.tagSlug ?? null,
       relatedCollections: related
         .filter((item) => item.indexable)
         .sort((a, b) => b.postCount - a.postCount)

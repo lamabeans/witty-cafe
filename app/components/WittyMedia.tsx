@@ -10,6 +10,15 @@ export const REACTIONS: Array<{ kind: ReactionKind; label: string }> = [
   { kind: "wow", label: "Wow" },
 ];
 
+const REACTION_KINDS: ReactionKind[] = [
+  "like",
+  "funny",
+  "love",
+  "wow",
+  "keep",
+  "share",
+];
+
 export function formatCount(value: number) {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace(/\.0$/, "")}m`;
   if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
@@ -17,7 +26,20 @@ export function formatCount(value: number) {
 }
 
 export function reactionTotal(counts: ReactionCounts) {
-  return REACTIONS.reduce((total, reaction) => total + counts[reaction.kind], 0);
+  return REACTION_KINDS.reduce((total, kind) => total + counts[kind], 0);
+}
+
+export function postAndMediaReactionTotal({
+  media,
+  reactionCounts,
+}: {
+  media: MediaSummary[];
+  reactionCounts: ReactionCounts;
+}) {
+  return media.reduce(
+    (total, item) => total + reactionTotal(item.reactionCounts),
+    reactionTotal(reactionCounts)
+  );
 }
 
 function mediaLabel(item: MediaSummary) {

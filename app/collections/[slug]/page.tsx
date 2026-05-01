@@ -13,7 +13,7 @@ import {
 
 type CollectionPageProps = {
   params: Promise<{ slug: string }>;
-  searchParams?: Promise<{ sort?: string | string[] }>;
+  searchParams?: Promise<{ sort?: string | string[]; tag?: string | string[] }>;
 };
 
 type CollectionSort = "popular" | "new" | "discussed";
@@ -60,6 +60,8 @@ type CollectionPageSummary = {
 type CollectionPageData = {
   collection: CollectionPageSummary;
   ideas: CollectionPageIdea[];
+  availableTags: Array<{ name: string; slug: string; count: number }>;
+  activeTagSlug: string | null;
   relatedCollections: CollectionPageSummary[];
   sort: CollectionSort;
 };
@@ -76,6 +78,11 @@ function normalizeSort(value: string | string[] | undefined): CollectionSort {
   return "popular";
 }
 
+function normalizeTag(value: string | string[] | undefined) {
+  const tag = Array.isArray(value) ? value[0] : value;
+  return tag?.trim() || undefined;
+}
+
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -88,10 +95,28 @@ function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function sortHref(slug: string, sort: CollectionSort) {
-  return sort === "popular"
-    ? `/collections/${slug}`
-    : `/collections/${slug}?sort=${sort}`;
+function collectionHref(
+  slug: string,
+  options: { sort?: CollectionSort; tagSlug?: string | null } = {}
+) {
+  const params = new URLSearchParams();
+  if (options.sort && options.sort !== "popular") {
+    params.set("sort", options.sort);
+  }
+  if (options.tagSlug) {
+    params.set("tag", options.tagSlug);
+  }
+
+  const query = params.toString();
+  return `/collections/${slug}${query ? `?${query}` : ""}`;
+}
+
+function sortHref(slug: string, sort: CollectionSort, tagSlug?: string | null) {
+  return collectionHref(slug, { sort, tagSlug });
+}
+
+function tagHref(slug: string, sort: CollectionSort, tagSlug?: string | null) {
+  return collectionHref(slug, { sort, tagSlug });
 }
 
 function MediaPreview({
@@ -233,16 +258,21 @@ export default async function CollectionPage({
   searchParams,
 }: CollectionPageProps) {
   const { slug } = await params;
-  const { sort: sortParam } = (await searchParams) ?? {};
+  const { sort: sortParam, tag: tagParam } = (await searchParams) ?? {};
   const sort = normalizeSort(sortParam);
+  const tagSlug = normalizeTag(tagParam);
   const data = (await fetchQuery(api.seo.collectionPage, {
     slug,
     sort,
+    tagSlug,
   })) as CollectionPageData | null;
 
   if (!data) notFound();
 
-  const { collection, ideas, relatedCollections } = data;
+  const { collection, ideas, availableTags, relatedCollections } = data;
+  const activeTag = tagSlug
+    ? availableTags.find((tag) => tag.slug === tagSlug)
+    : null;
   const intro = stripBbCode(collection.introduction || collection.description);
   const conclusion = stripBbCode(collection.conclusion);
   const pageUrl = absoluteUrl(`/collections/${collection.slug}`);
@@ -367,7 +397,7 @@ export default async function CollectionPage({
               {SORT_OPTIONS.map((option) => (
                 <Link
                   key={option.value}
-                  href={sortHref(collection.slug, option.value)}
+                  href={sortHref(collection.slug, option.value, tagSlug)}
                   className={`wc-button ${
                     sort === option.value ? "wc-button-active" : ""
                   }`}
@@ -375,11 +405,71 @@ export default async function CollectionPage({
                   {option.label}
                 </Link>
               ))}
-              <Link href="/" className="wc-button">
-                Open Feed
-              </Link>
+              <details className="relative">
+                <summary
+                  className={`wc-button cursor-pointer list-none [&::-webkit-details-marker]:hidden ${
+                    tagSlug ? "wc-button-active" : ""
+                  }`}
+                >
+                  Filter
+                </summary>
+                <div className="absolute right-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border-2 border-[var(--stroke)] bg-[var(--surface)] p-3 shadow-[4px_4px_0_var(--stroke)]">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+                      Vibes
+                    </span>
+                    {tagSlug ? (
+                      <Link
+                        href={tagHref(collection.slug, sort)}
+                        className="text-xs font-black text-[var(--magenta)]"
+                      >
+                        Clear
+                      </Link>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={tagHref(collection.slug, sort)}
+                      className={`wc-button ${
+                        !tagSlug ? "wc-button-active" : ""
+                      }`}
+                    >
+                      All vibes
+                    </Link>
+                    {availableTags.map((tag) => (
+                      <Link
+                        key={tag.slug}
+                        href={tagHref(collection.slug, sort, tag.slug)}
+                        className={`wc-button ${
+                          tagSlug === tag.slug ? "wc-button-active" : ""
+                        }`}
+                      >
+                        {tag.name} ({formatCount(tag.count)})
+                      </Link>
+                    ))}
+                  </div>
+                  {availableTags.length === 0 ? (
+                    <p className="mt-3 text-sm font-bold text-[var(--muted)]">
+                      No vibes have been added yet.
+                    </p>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </div>
+          {activeTag ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-[var(--muted)]">
+              <span>
+                Filtering by <span className="text-[var(--ink)]">{activeTag.name}</span>
+              </span>
+              <Link
+                href={tagHref(collection.slug, sort)}
+                className="font-black text-[var(--magenta)]"
+              >
+                Clear filter
+              </Link>
+            </div>
+          ) : null}
 
           {ideas.map((idea, index) => (
             <article key={idea._id} className="wc-card overflow-hidden">
@@ -404,9 +494,15 @@ export default async function CollectionPage({
                 {idea.vibes.length ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {idea.vibes.map((vibe) => (
-                      <span key={vibe.slug} className="wc-button pointer-events-none">
+                      <Link
+                        key={vibe.slug}
+                        href={tagHref(collection.slug, sort, vibe.slug)}
+                        className={`wc-button ${
+                          tagSlug === vibe.slug ? "wc-button-active" : ""
+                        }`}
+                      >
                         {vibe.name}
-                      </span>
+                      </Link>
                     ))}
                   </div>
                 ) : null}
@@ -431,7 +527,9 @@ export default async function CollectionPage({
 
           {ideas.length === 0 ? (
             <div className="wc-card p-10 text-center text-sm font-bold text-[var(--muted)]">
-              This collection is waiting for its first ideas.
+              {tagSlug
+                ? "No ideas match this filter yet."
+                : "This collection is waiting for its first ideas."}
             </div>
           ) : null}
         </section>

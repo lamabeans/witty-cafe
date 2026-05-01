@@ -19,7 +19,7 @@ import {
   MediaViewer,
   ReactionBar,
   formatCount,
-  reactionTotal,
+  postAndMediaReactionTotal,
 } from "./components/WittyMedia";
 
 type MediaKind = "image" | "video" | "audio" | "model3d" | "game" | "unknown";
@@ -67,7 +67,7 @@ function mediaKindFor(file: File): MediaKind {
 }
 
 function postReactionTotal(post: EnrichedPost) {
-  return reactionTotal(post.reactionCounts);
+  return postAndMediaReactionTotal(post);
 }
 
 function visibleMediaCount(post: EnrichedPost) {

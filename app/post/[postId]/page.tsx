@@ -29,6 +29,22 @@ function postDescription(post: EnrichedPost) {
   );
 }
 
+function reactionCountTotal(post: EnrichedPost) {
+  const postTotal = Object.values(post.reactionCounts).reduce(
+    (total, value) => total + value,
+    0
+  );
+  return post.media.reduce(
+    (total, item) =>
+      total +
+      Object.values(item.reactionCounts).reduce(
+        (mediaTotal, value) => mediaTotal + value,
+        0
+      ),
+    postTotal
+  );
+}
+
 export async function generateMetadata({
   params,
 }: PostPageProps): Promise<Metadata> {
@@ -104,10 +120,7 @@ export default async function PostPage({ params }: PostPageProps) {
       {
         "@type": "InteractionCounter",
         interactionType: "https://schema.org/LikeAction",
-        userInteractionCount: Object.values(post.reactionCounts).reduce(
-          (total, value) => total + value,
-          0
-        ),
+        userInteractionCount: reactionCountTotal(post),
       },
       {
         "@type": "InteractionCounter",

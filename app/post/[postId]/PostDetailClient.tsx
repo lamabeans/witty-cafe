@@ -17,7 +17,7 @@ import {
   MediaViewer,
   ReactionBar,
   formatCount,
-  reactionTotal,
+  postAndMediaReactionTotal,
 } from "../../components/WittyMedia";
 import { RichTextContent } from "../../components/RichTextContent";
 
@@ -171,7 +171,7 @@ function errorMessage(error: unknown) {
 }
 
 function postReactionTotal(post: EnrichedPost) {
-  return reactionTotal(post.reactionCounts);
+  return postAndMediaReactionTotal(post);
 }
 
 function visibleMedia(post: EnrichedPost | null | undefined) {
