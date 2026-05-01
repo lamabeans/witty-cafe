@@ -31,6 +31,7 @@ type ProviderConfig = {
   apiKey: string | undefined;
   endpoint: string;
   model: string;
+  temperature: number;
   bodyExtras?: Record<string, unknown>;
 };
 
@@ -110,6 +111,7 @@ function providerConfig(provider: AiTextProvider): ProviderConfig {
       apiKey: envSecret("ZAI_API_KEY"),
       endpoint: `${baseUrl}/chat/completions`,
       model: envString("AI_ZAI_TEXT_MODEL", "glm-5.1"),
+      temperature: 0.75,
       bodyExtras: { thinking: { type: "disabled" } },
     };
   }
@@ -123,6 +125,7 @@ function providerConfig(provider: AiTextProvider): ProviderConfig {
     apiKey: envSecret("MOONSHOT_API_KEY"),
     endpoint: `${baseUrl}/chat/completions`,
     model: envString("AI_KIMI_TEXT_MODEL", "kimi-k2.6"),
+    temperature: 0.6,
     bodyExtras: { thinking: { type: "disabled" } },
   };
 }
@@ -232,7 +235,7 @@ async function chatJson(config: ProviderConfig, prompt: string) {
     },
     body: JSON.stringify({
       model: config.model,
-      temperature: 0.75,
+      temperature: config.temperature,
       stream: false,
       messages: [
         { role: "system", content: systemPrompt() },
