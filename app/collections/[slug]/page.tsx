@@ -6,7 +6,10 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { absoluteUrl, cleanMediaAltText, stripBbCode, truncateText } from "../../lib/site";
 import { imageUrlsFor, mediaObjectsFor } from "../../lib/structuredData";
-import { CollectionIdeaActions } from "./CollectionIdeaActions";
+import {
+  CollectionIdeaActions,
+  CollectionMediaLove,
+} from "./CollectionIdeaActions";
 
 type CollectionPageProps = {
   params: Promise<{ slug: string }>;
@@ -52,9 +55,11 @@ function MediaPreview({
 }: {
   href: string;
   item: {
+    _id?: Id<"mediaItems">;
     url: string | null;
     mediaType: "image" | "video" | "audio" | "model3d" | "game" | "unknown";
     altText?: string | null;
+    loveCount?: number | null;
   };
   title: string;
 }) {
@@ -63,32 +68,44 @@ function MediaPreview({
 
   if (item.mediaType === "image" || item.mediaType === "unknown") {
     return (
-      <Link href={href} aria-label={`Open ${title}`} className="block shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={item.url}
-          alt={label}
-          className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] object-cover transition hover:-translate-y-0.5 sm:h-32 sm:w-44"
-        />
-      </Link>
+      <div className="relative shrink-0">
+        <Link href={href} aria-label={`Open ${title}`} className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.url}
+            alt={label}
+            className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] object-cover sm:h-32 sm:w-44"
+          />
+        </Link>
+        {item._id ? (
+          <CollectionMediaLove
+            mediaItemId={item._id}
+            initialCount={item.loveCount ?? 0}
+          />
+        ) : null}
+      </div>
     );
   }
 
   if (item.mediaType === "video") {
     return (
-      <Link
-        href={href}
-        aria-label={label}
-        className="block shrink-0"
-      >
-        <video
-          src={item.url}
-          muted
-          playsInline
-          preload="metadata"
-          className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] bg-black object-cover transition hover:-translate-y-0.5 sm:h-32 sm:w-44"
-        />
-      </Link>
+      <div className="relative shrink-0">
+        <Link href={href} aria-label={label} className="block">
+          <video
+            src={item.url}
+            muted
+            playsInline
+            preload="metadata"
+            className="h-28 w-36 rounded-lg border-2 border-[var(--stroke)] bg-black object-cover sm:h-32 sm:w-44"
+          />
+        </Link>
+        {item._id ? (
+          <CollectionMediaLove
+            mediaItemId={item._id}
+            initialCount={item.loveCount ?? 0}
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -341,7 +358,6 @@ export default async function CollectionPage({
                     ))}
                   </div>
                 ) : null}
-                <CollectionIdeaActions postId={idea._id as Id<"posts">} />
                 {idea.media.length ? (
                   <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
                     {idea.media.map((item) => (
@@ -354,6 +370,9 @@ export default async function CollectionPage({
                     ))}
                   </div>
                 ) : null}
+              </div>
+              <div className="border-t-2 border-[var(--stroke)] bg-[var(--canvas-2)] px-5 py-4 sm:px-6">
+                <CollectionIdeaActions postId={idea._id as Id<"posts">} />
               </div>
             </article>
           ))}

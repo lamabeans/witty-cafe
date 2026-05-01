@@ -388,12 +388,18 @@ async function ideaSummary(ctx: SeoCtx, post: Doc<"posts">) {
     const identity = mediaIdentity(item);
     if (identity && seenMedia.has(identity)) continue;
     if (identity) seenMedia.add(identity);
+    const mediaReactions = await ctx.db
+      .query("mediaReactions")
+      .withIndex("by_media", (q) => q.eq("mediaItemId", item._id))
+      .collect();
     media.push({
+      _id: item._id,
       url,
       mediaType: item.mediaType ?? inferLegacyMediaType(item),
       altText: item.altText ?? item.imageName ?? item.filename ?? post.title,
       duration: item.duration ?? null,
       filename: item.filename ?? item.imageName ?? null,
+      loveCount: mediaReactions.filter((reaction) => reaction.kind === "love").length,
     });
     if (media.length >= 3) break;
   }

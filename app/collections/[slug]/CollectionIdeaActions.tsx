@@ -10,13 +10,14 @@ type CollectionAction = {
   kind: Extract<ReactionKind, "like" | "love" | "keep" | "share">;
   label: string;
   icon: "thumb" | "heart" | "bookmark" | "share";
+  color: string;
 };
 
 const ACTIONS: CollectionAction[] = [
-  { kind: "like", label: "Like", icon: "thumb" },
-  { kind: "love", label: "Love", icon: "heart" },
-  { kind: "keep", label: "Keep", icon: "bookmark" },
-  { kind: "share", label: "Share", icon: "share" },
+  { kind: "like", label: "Like", icon: "thumb", color: "#ffee00" },
+  { kind: "love", label: "Love", icon: "heart", color: "#ffd9f7" },
+  { kind: "keep", label: "Keep", icon: "bookmark", color: "#c8f0e8" },
+  { kind: "share", label: "Share", icon: "share", color: "#d8e8ff" },
 ];
 
 function ActionIcon({ icon }: { icon: CollectionAction["icon"] }) {
@@ -103,7 +104,7 @@ export function CollectionIdeaActions({ postId }: { postId: Id<"posts"> }) {
   }
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {ACTIONS.map((action) => {
         const active = selected === action.kind;
         return (
@@ -114,12 +115,14 @@ export function CollectionIdeaActions({ postId }: { postId: Id<"posts"> }) {
             title={action.label}
             disabled={busy !== null}
             onClick={() => void handleAction(action.kind)}
+            style={{ background: action.color }}
             className={[
-              "inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-[var(--stroke)] bg-[var(--surface)] text-[var(--ink)] shadow-[2px_2px_0_var(--stroke)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60",
-              active ? "bg-[var(--yellow)] text-black shadow-[2px_2px_0_var(--magenta)]" : "",
+              "inline-flex h-9 min-w-9 items-center justify-center gap-1.5 border-2 border-[var(--stroke)] px-2 text-black shadow-[2px_2px_0_var(--stroke)] disabled:cursor-not-allowed disabled:opacity-60",
+              active ? "shadow-[3px_3px_0_var(--magenta)]" : "",
             ].join(" ")}
           >
             <ActionIcon icon={action.icon} />
+            <span className="hidden text-xs font-black sm:inline">{action.label}</span>
           </button>
         );
       })}
@@ -127,5 +130,69 @@ export function CollectionIdeaActions({ postId }: { postId: Id<"posts"> }) {
         <span className="text-xs font-bold text-[var(--muted)]">{message}</span>
       ) : null}
     </div>
+  );
+}
+
+export function CollectionMediaLove({
+  mediaItemId,
+  initialCount = 0,
+}: {
+  mediaItemId: Id<"mediaItems">;
+  initialCount?: number;
+}) {
+  const toggleMediaReaction = useMutation(api.reactions.toggleMedia);
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const [count, setCount] = useState(initialCount);
+  const [active, setActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function handleLove() {
+    if (!isAuthenticated || isLoading) return;
+
+    setBusy(true);
+    const nextActive = !active;
+    setActive(nextActive);
+    setCount((value) => Math.max(0, value + (nextActive ? 1 : -1)));
+    try {
+      const result = await toggleMediaReaction({ mediaItemId, kind: "love" });
+      const confirmedActive = result.viewerReaction === "love";
+      if (confirmedActive !== nextActive) {
+        setCount((value) =>
+          Math.max(0, value + (confirmedActive ? 1 : -1))
+        );
+      }
+      setActive(confirmedActive);
+    } catch {
+      setActive(active);
+      setCount((value) => Math.max(0, value + (nextActive ? -1 : 1)));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Love this media"
+      title={isAuthenticated ? "Love this media" : "Sign in to love this media"}
+      disabled={busy}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void handleLove();
+      }}
+      className={[
+        "absolute right-2 top-2 z-10 inline-flex h-8 items-center gap-1 border-2 border-black bg-white px-2 text-[10px] font-black text-black shadow-[2px_2px_0_var(--stroke)] disabled:cursor-not-allowed disabled:opacity-70",
+        active ? "bg-[var(--magenta-soft)] shadow-[2px_2px_0_var(--magenta)]" : "",
+      ].join(" ")}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-3.5 w-3.5">
+        <path
+          d="M12 20.2s-7.4-4.4-9.4-9.4C1 6.8 3.4 3.8 7 3.8c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 6 3 4.4 7-2 5-9.4 9.4-9.4 9.4Z"
+          fill="currentColor"
+        />
+      </svg>
+      <span>{count}</span>
+    </button>
   );
 }
