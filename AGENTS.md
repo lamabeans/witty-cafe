@@ -85,8 +85,10 @@ If the live site does not match the pushed code, inspect the latest Vercel deplo
   - `AI_ELEVENLABS_MODEL`.
   - `AI_KIMI_MODEL`.
   - `AI_ANTHROPIC_MODEL`.
-- Default OpenAI models are `gpt-image-2`, `gpt-4o-mini-tts`, and `sora-2`.
-- Default Gemini models are `gemini-3.1-flash-image-preview`, `gemini-3.1-flash-tts-preview`, and `veo-3.1-generate-preview`.
+- Default OpenAI models are `gpt-image-1.5`, `gpt-4o-mini-tts`, and `sora-2`.
+  - `gpt-image-1.5` shuts down on 1 December 2026. Move to `gpt-image-2` via `AI_IMAGE_MODEL` before then, and re-check the hardcoded `quality: "low"` request parameter when you do.
+- Default Gemini models are `gemini-3.1-flash-image`, `gemini-3.1-flash-tts-preview`, and `veo-3.1-generate-preview`.
+- Run `npm run check:image-generation` with the provider keys exported to confirm the image path still renders before relying on it. It replays the exact Convex requests, so a pass means the Convex action works with the same keys.
 - Default Kimi prompt model is `kimi-k2.6`; default Anthropic prompt model is `claude-sonnet-4-20250514`; default ElevenLabs TTS model is `eleven_multilingual_v2`.
 - Generated media is stored in Convex Storage and attached as `mediaItems.source = "ai-generated"`.
 

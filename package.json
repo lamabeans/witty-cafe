@@ -18,7 +18,8 @@
     "migrate:collections": "node scripts/migrateCollections.mjs --apply",
     "migrate:collections:cleanup": "node scripts/migrateCollections.mjs --apply --delete-legacy",
     "import:post-images:dry-run": "node scripts/importPostImages.mjs --dry-run",
-    "import:post-images": "node scripts/importPostImages.mjs --import"
+    "import:post-images": "node scripts/importPostImages.mjs --import",
+    "check:image-generation": "node scripts/checkImageGeneration.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",

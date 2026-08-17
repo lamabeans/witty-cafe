@@ -179,7 +179,7 @@ function openAiModelFor(mediaType: GenerationMediaType) {
 
 function geminiModelFor(mediaType: GenerationMediaType) {
   if (mediaType === "image") {
-    return envString("AI_GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview");
+    return envString("AI_GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image");
   }
   if (mediaType === "audio") {
     return envString("AI_GEMINI_AUDIO_MODEL", "gemini-3.1-flash-tts-preview");
@@ -670,7 +670,7 @@ async function generateGeminiImage(
     {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        responseModalities: ["Image"],
+        responseModalities: ["TEXT", "IMAGE"],
         imageConfig: {
           aspectRatio: "1:1",
           imageSize: envString("AI_GEMINI_IMAGE_SIZE", "1K"),
